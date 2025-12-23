@@ -6,7 +6,7 @@ export function DemisandLogo({ size = 28 }: { size?: number }) {
     <View style={styles.container}>
       <Image
         source={require('@/assets/images/logo.jpg')}
-        style={[styles.logoImage, { width: size * 6.6, height: size * 2.6 }]}
+        style={[styles.logoImage, { width: size * 5.6, height: size * 3.6 }]}
         resizeMode="contain"
       />
     </View>

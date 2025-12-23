@@ -25,6 +25,10 @@ export default function StoreDetailScreen() {
 
   const [editingStoreName, setEditingStoreName] = useState('');
   const [editingStoreDesc, setEditingStoreDesc] = useState('');
+  const [paypalEmail, setPaypalEmail] = useState('');
+  const [bankAccountName, setBankAccountName] = useState('');
+  const [bankAccountNumber, setBankAccountNumber] = useState('');
+  const [bankName, setBankName] = useState('');
 
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [productTitle, setProductTitle] = useState('');
@@ -62,6 +66,10 @@ export default function StoreDetailScreen() {
       setProducts(p);
       setEditingStoreName(s.name);
       setEditingStoreDesc(s.description ?? '');
+      setPaypalEmail(s.paypalEmail || '');
+      setBankAccountName(s.bankDetails?.accountName || '');
+      setBankAccountNumber(s.bankDetails?.accountNumber || '');
+      setBankName(s.bankDetails?.bankName || '');
       
       // Load stats if owner
       if (user?.token && s.owner?.toString() === user.id) {
@@ -94,7 +102,26 @@ export default function StoreDetailScreen() {
         { name: editingStoreName, description: editingStoreDesc },
         user.token
       );
-      setStore(updated);
+
+      // Update PayPal email if changed
+      if (paypalEmail !== (updated.paypalEmail || '')) {
+        try {
+          await api.patch(`/stores/${storeId}/paypal-email`, { paypalEmail }, user.token);
+        } catch (err: any) {
+          Alert.alert('PayPal update failed', err.message || 'Failed to update PayPal email');
+        }
+      }
+
+      // Update bank details if provided
+      if (bankAccountName && bankAccountNumber && bankName) {
+        try {
+          await api.patch(`/stores/${storeId}/bank-details`, { accountName: bankAccountName, accountNumber: bankAccountNumber, bankName, iban: '' }, user.token);
+        } catch (err: any) {
+          Alert.alert('Bank update failed', err.message || 'Failed to update bank details');
+        }
+      }
+
+      setStore(await api.get(`/stores/id/${storeId}`));
       Alert.alert('Success', 'Store updated.');
     } catch (err: any) {
       Alert.alert('Error', err.message);
@@ -128,9 +155,8 @@ export default function StoreDetailScreen() {
       return;
     }
 
-    const mediaType =
-      (ImagePicker as any).MediaType?.Images ??
-      (ImagePicker as any).MediaTypeOptions?.Images;
+    const anyPicker = ImagePicker as any;
+    const mediaType = anyPicker.MediaType?.Images ?? anyPicker.MediaTypeOptions?.Images ?? ImagePicker.MediaType?.Images ?? ImagePicker.MediaTypeOptions?.Images;
 
     const result = await ImagePicker.launchImageLibraryAsync({
       /**
@@ -380,6 +406,34 @@ export default function StoreDetailScreen() {
                     placeholder="Description"
                     multiline
                     numberOfLines={3}
+                  />
+                  <TextInput
+                    style={styles.input}
+                    value={paypalEmail}
+                    onChangeText={setPaypalEmail}
+                    placeholder="PayPal email (optional)"
+                    keyboardType="email-address"
+                    autoCapitalize="none"
+                  />
+                  <ThemedText style={{ marginTop: 6, marginBottom: 6, color: '#666' }}>Or enter bank details</ThemedText>
+                  <TextInput
+                    style={styles.input}
+                    value={bankAccountName}
+                    onChangeText={setBankAccountName}
+                    placeholder="Account holder name"
+                  />
+                  <TextInput
+                    style={styles.input}
+                    value={bankAccountNumber}
+                    onChangeText={setBankAccountNumber}
+                    placeholder="Account number"
+                    keyboardType="numeric"
+                  />
+                  <TextInput
+                    style={styles.input}
+                    value={bankName}
+                    onChangeText={setBankName}
+                    placeholder="Bank name"
                   />
                   <View style={styles.formActions}>
                     <Pressable style={[styles.saveButton, { flex: 1 }]} onPress={saveStore}>

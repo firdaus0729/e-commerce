@@ -9,6 +9,10 @@ dist/
 web-build/
 expo-env.d.ts
 
+
+# Expo shared and build artifacts
+.expo-shared/
+
 # Native
 .kotlin/
 *.orig.*
@@ -32,6 +36,8 @@ yarn-error.*
 
 # local env files
 .env*.local
+.env
+.env.*
 
 # typescript
 *.tsbuildinfo
@@ -39,5 +45,43 @@ yarn-error.*
 app-example
 
 # generated native folders
-/ios
-/android
+
+# Native build artifacts (keep native project folders if you commit them, but ignore build caches)
+android/.gradle/
+android/app/build/
+android/.cxx/
+android/local.properties
+android/.idea/
+android/*/build/
+ios/Pods/
+ios/build/
+ios/DerivedData/
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# TypeScript
+*.tsbuildinfo
+
+# Credentials / keys
+*.keystore
+*.jks
+*.p12
+*.p8
+*.pem
+
+# Metro
+.metro-health-check*
+
+# Misc
+.expo-credentials.json
+*.tgz
+
+# Other
+.trunk/
+.vscode/
+.zencoder/
+.zenflow/

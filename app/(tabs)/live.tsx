@@ -8,6 +8,7 @@ import { CreateStreamModal } from '@/components/live-stream/CreateStreamModal';
 import { api } from '@/lib/api';
 import { Stream } from '@/types';
 import { useAuth } from '@/hooks/use-auth';
+import { useRouter } from 'expo-router';
 import { MaterialIcons } from '@expo/vector-icons';
 import { brandYellow } from '@/constants/theme';
 
@@ -100,6 +101,7 @@ try {
 
 export default function LiveScreen() {
   const { user } = useAuth();
+  const router = useRouter();
   const [selectedStream, setSelectedStream] = useState<Stream | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [myStream, setMyStream] = useState<Stream | null>(null);
@@ -138,6 +140,14 @@ export default function LiveScreen() {
   const handleCreateStream = () => {
     if (!user) {
       Alert.alert('Login Required', 'Please login to create a stream');
+      return;
+    }
+    // Require sellers to have a store before creating a stream
+    if (!user.store) {
+      Alert.alert('Create a Store', 'You need to create a store before going live.', [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Create Store', onPress: () => router.push('/store/create') },
+      ]);
       return;
     }
     setShowCreateModal(true);

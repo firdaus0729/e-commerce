@@ -24,7 +24,7 @@ export function VideoCall({ visible, onClose, otherUserId, otherUserName, postId
   const remoteVideoRef = useRef<any>(null);
   const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
-  const wsRef = useRef<WebSocket | null>(null);
+  const socketRef = useRef<any>(null);
 
   useEffect(() => {
     if (visible) {
@@ -104,14 +104,8 @@ export function VideoCall({ visible, onClose, otherUserId, otherUserName, postId
 
       // Handle ICE candidates
       peerConnection.onicecandidate = (event) => {
-        if (event.candidate && wsRef.current) {
-            wsRef.current.send(JSON.stringify({
-              type: 'ice-candidate',
-              candidate: event.candidate,
-              to: otherUserId,
-              from: user?.id,
-              postId,
-            }));
+        if (event.candidate && socketRef.current) {
+            socketRef.current.emit('ice-candidate', { to: otherUserId, candidate: event.candidate });
         }
       };
 
@@ -126,72 +120,44 @@ export function VideoCall({ visible, onClose, otherUserId, otherUserName, postId
   };
 
   const connectSignalingServer = () => {
-    // Connect to WebSocket signaling server
-    const wsUrl = API_URL.replace('http', 'ws').replace('https', 'wss');
-    
     try {
-      const ws = new WebSocket(wsUrl);
-      wsRef.current = ws;
+      const io = require('socket.io-client');
+      const socket = io(API_URL, { auth: { token: user?.token }, transports: ['websocket'] });
+      socketRef.current = socket;
 
-      ws.onopen = () => {
-        // Authenticate with token
-        ws.send(JSON.stringify({
-          type: 'auth',
-          token: user?.token,
-        }));
-
-        // Send join message
-        ws.send(JSON.stringify({
-          type: 'join',
-          userId: user?.id,
-          postId,
-        }));
-
-        // Create and send offer immediately
+      socket.on('connect', () => {
+        socket.emit('join', { postId });
         setTimeout(() => createOffer(), 100);
-      };
+      });
 
-      ws.onmessage = async (event) => {
-        const message = JSON.parse(event.data);
-
-        switch (message.type) {
-          case 'offer':
-            await handleOffer(message.offer);
-            break;
-          case 'answer':
-            await handleAnswer(message.answer);
-            break;
-          case 'ice-candidate':
-            await handleIceCandidate(message.candidate);
-            break;
-          case 'call-accepted':
-            setCallStatus('ringing');
-            break;
-          case 'call-rejected':
-            Alert.alert('Call Rejected', 'The other user rejected your call');
-            endCall();
-            break;
+      socket.on('incoming-call', async (data: any) => {
+        if (data && data.offer) {
+          await handleOffer(data.offer);
         }
-      };
+      });
 
-      ws.onerror = (error) => {
-        console.error('WebSocket error:', error);
-        Alert.alert('Connection Error', 'Failed to connect to signaling server');
-      };
+      socket.on('call-accepted', (data: any) => {
+        if (data && data.answer) {
+          handleAnswer(data.answer);
+        }
+      });
 
-      ws.onclose = () => {
-        console.log('WebSocket closed');
-      };
+      socket.on('call-rejected', () => {
+        Alert.alert('Call Rejected', 'The other user rejected your call');
+        endCall();
+      });
+
+      socket.on('ice-candidate', async (data: any) => {
+        if (data && data.candidate) {
+          await handleIceCandidate(data.candidate);
+        }
+      });
+
+      socket.on('disconnect', () => {
+        console.log('signaling disconnected');
+      });
     } catch (err) {
-      // Fallback: Use HTTP polling if WebSocket not available
-      Alert.alert(
-        'WebRTC Setup',
-        'WebRTC requires a WebSocket signaling server.\n\n' +
-        'To enable video calls:\n' +
-        '1. Set up a WebSocket server (see backend setup)\n' +
-        '2. Or use Agora.io service (easier)\n\n' +
-        'See WHATSAPP_FEATURES_EXPLANATION.md for details.'
-      );
+      Alert.alert('WebRTC Setup', 'Failed to connect to signaling server');
     }
   };
 
@@ -202,14 +168,8 @@ export function VideoCall({ visible, onClose, otherUserId, otherUserName, postId
       const offer = await peerConnectionRef.current.createOffer();
       await peerConnectionRef.current.setLocalDescription(offer);
 
-      if (wsRef.current && user?.id) {
-        wsRef.current.send(JSON.stringify({
-          type: 'offer',
-          offer,
-          to: otherUserId,
-          from: user.id,
-          postId,
-        }));
+      if (socketRef.current && user?.id) {
+        socketRef.current.emit('call-user', { to: otherUserId, offer, postId });
       }
     } catch (err: any) {
       Alert.alert('Error', 'Failed to create offer');
@@ -224,14 +184,8 @@ export function VideoCall({ visible, onClose, otherUserId, otherUserName, postId
       const answer = await peerConnectionRef.current.createAnswer();
       await peerConnectionRef.current.setLocalDescription(answer);
 
-      if (wsRef.current) {
-        wsRef.current.send(JSON.stringify({
-          type: 'answer',
-          answer,
-          to: otherUserId,
-          from: user?.id,
-          postId,
-        }));
+      if (socketRef.current) {
+        socketRef.current.emit('call-accepted', { to: otherUserId, answer });
       }
     } catch (err: any) {
       Alert.alert('Error', 'Failed to handle offer');
@@ -289,9 +243,9 @@ export function VideoCall({ visible, onClose, otherUserId, otherUserName, postId
       peerConnectionRef.current = null;
     }
 
-    if (wsRef.current) {
-      wsRef.current.close();
-      wsRef.current = null;
+    if (socketRef.current) {
+      socketRef.current.close();
+      socketRef.current = null;
     }
 
     setCallStatus('ended');

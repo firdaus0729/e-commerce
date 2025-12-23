@@ -144,12 +144,11 @@ export default function ProfileScreen() {
       return;
     }
 
-    const mediaType =
-      (ImagePicker as any).MediaType?.Images ??
-      (ImagePicker as any).MediaTypeOptions?.Images;
+    const anyPicker = ImagePicker as any;
+    const mediaType = anyPicker.MediaType?.Images ?? ImagePicker.MediaType?.Images ?? anyPicker.MediaType?.All ?? ImagePicker.MediaType?.All;
 
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: mediaType,
+      mediaTypes: mediaType as any,
       allowsEditing: true,
       aspect: [1, 1],
       quality: 0.8,
@@ -175,19 +174,11 @@ export default function ProfileScreen() {
         type,
       } as any);
 
-      const response = await fetch(`${API_URL}/upload/image`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${user.token}`,
-        },
-        body: formData,
-      });
-
-      if (!response.ok) {
-        throw new Error('Upload failed');
-      }
-
-      const data = await response.json();
+      const data = await api.upload<{ url: string; filename: string; size: number }>(
+        '/upload/image',
+        formData,
+        user.token
+      );
       await api.patch('/users/me', { profilePhoto: data.url }, user.token);
       
       // Update immediately in local state for instant UI update
@@ -219,12 +210,11 @@ export default function ProfileScreen() {
       return;
     }
 
-    const mediaType =
-      (ImagePicker as any).MediaType?.Images ??
-      (ImagePicker as any).MediaTypeOptions?.Images;
+    const anyPicker2 = ImagePicker as any;
+    const mediaType2 = anyPicker2.MediaType?.Images ?? ImagePicker.MediaType?.Images ?? anyPicker2.MediaType?.All ?? ImagePicker.MediaType?.All;
 
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: mediaType,
+      mediaTypes: mediaType2 as any,
       allowsEditing: true,
       aspect: [1, 1],
       quality: 0.8,
@@ -255,19 +245,11 @@ export default function ProfileScreen() {
         type,
       } as any);
 
-      const uploadResponse = await fetch(`${API_URL}/upload/image`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${user.token}`,
-        },
-        body: formData,
-      });
-
-      if (!uploadResponse.ok) {
-        throw new Error('Image upload failed');
-      }
-
-      const uploadData = await uploadResponse.json();
+      const uploadData = await api.upload<{ url: string; filename: string; size: number }>(
+        '/upload/image',
+        formData,
+        user.token
+      );
 
       // Create post
       await api.post(
@@ -329,7 +311,7 @@ export default function ProfileScreen() {
     <ThemedView style={styles.container}>
       <Header
         showSearch={false}
-        showBack={false}
+        showBack
         showMenu={true}
         rightAction={{
           onPress: handleCreatePost,
@@ -337,12 +319,7 @@ export default function ProfileScreen() {
           circular: true,
         }}
         onMenuPress={() => {
-          Alert.alert('Menu', 'Menu options', [
-            { text: 'Live Streaming', onPress: () => router.push('/(tabs)/live') },
-            { text: 'Settings', onPress: () => {} },
-            { text: 'Logout', onPress: logout, style: 'destructive' },
-            { text: 'Cancel', style: 'cancel' },
-          ]);
+          router.push('/settings');
         }}
       />
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
@@ -390,36 +367,6 @@ export default function ProfileScreen() {
             </ThemedText>
           </View>
         </View>
-
-        {/* Payment Settings Section */}
-        <View style={styles.settingsSection}>
-          <ThemedText style={styles.settingsTitle}>Payment Settings</ThemedText>
-          <View style={styles.paypalSection}>
-            <View style={styles.paypalInfo}>
-              <ThemedText style={styles.paypalLabel}>PayPal Email</ThemedText>
-              <ThemedText style={styles.paypalValue}>
-                {user?.paypalEmail || 'Not linked'}
-              </ThemedText>
-              {!user?.paypalEmail && (
-                <ThemedText style={styles.paypalHint}>
-                  Link your PayPal account to make purchases
-                </ThemedText>
-              )}
-            </View>
-            <Pressable
-              style={styles.paypalButton}
-              onPress={() => {
-                setPaypalEmail(user?.paypalEmail || '');
-                setShowPayPalModal(true);
-              }}
-            >
-              <ThemedText style={styles.paypalButtonText}>
-                {user?.paypalEmail ? 'Update' : 'Link PayPal'}
-              </ThemedText>
-            </Pressable>
-          </View>
-        </View>
-
         {/* Follow Flow Band */}
         {suggestedUsers.length > 0 && (
           <View style={styles.followFlowContainer}>

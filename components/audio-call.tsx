@@ -20,7 +20,7 @@ export function AudioCall({ visible, onClose, otherUserId, otherUserName, postId
   const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
   const remoteStreamRef = useRef<MediaStream | null>(null);
-  const wsRef = useRef<WebSocket | null>(null);
+  const socketRef = useRef<any>(null);
 
   useEffect(() => {
     if (visible) {
@@ -83,14 +83,8 @@ export function AudioCall({ visible, onClose, otherUserId, otherUserName, postId
         };
 
         peerConnection.onicecandidate = (event) => {
-          if (event.candidate && wsRef.current) {
-            wsRef.current.send(JSON.stringify({
-              type: 'ice-candidate',
-              candidate: event.candidate,
-              to: otherUserId,
-              from: user?.id,
-              postId,
-            }));
+          if (event.candidate && socketRef.current) {
+            socketRef.current.emit('ice-candidate', { to: otherUserId, candidate: event.candidate });
           }
         };
 
@@ -108,55 +102,41 @@ export function AudioCall({ visible, onClose, otherUserId, otherUserName, postId
   };
 
   const connectSignalingServer = () => {
-    const wsUrl = API_URL.replace('http', 'ws').replace('https', 'wss');
-    
     try {
-      const ws = new WebSocket(wsUrl);
-      wsRef.current = ws;
+      const io = require('socket.io-client');
+      const socket = io(API_URL, { auth: { token: user?.token }, transports: ['websocket'] });
+      socketRef.current = socket;
 
-      ws.onopen = () => {
+      socket.on('connect', () => {
         if (user?.token) {
-          ws.send(JSON.stringify({
-            type: 'auth',
-            token: user.token,
-          }));
+          socket.emit('join', { postId });
         }
 
-        ws.send(JSON.stringify({
-          type: 'join',
-          userId: user?.id,
-          postId,
-        }));
-
-        // Create offer immediately
         setTimeout(() => createOffer(), 100);
-      };
+      });
 
-      ws.onmessage = async (event) => {
-        const message = JSON.parse(event.data);
-
-        switch (message.type) {
-          case 'offer':
-            await handleOffer(message.offer);
-            break;
-          case 'answer':
-            await handleAnswer(message.answer);
-            break;
-          case 'ice-candidate':
-            await handleIceCandidate(message.candidate);
-            break;
-          case 'call-accepted':
-            setCallStatus('ringing');
-            break;
-          case 'call-rejected':
-            onClose();
-            break;
+      socket.on('incoming-call', async (data: any) => {
+        if (data && data.offer) {
+          await handleOffer(data.offer);
         }
-      };
+      });
 
-      ws.onerror = (error) => {
-        console.error('WebSocket error:', error);
-      };
+      socket.on('call-accepted', (data: any) => {
+        setCallStatus('ringing');
+        if (data && data.answer) {
+          handleAnswer(data.answer);
+        }
+      });
+
+      socket.on('call-rejected', () => {
+        onClose();
+      });
+
+      socket.on('ice-candidate', async (data: any) => {
+        if (data && data.candidate) {
+          await handleIceCandidate(data.candidate);
+        }
+      });
     } catch (err) {
       console.error('Failed to connect to signaling server:', err);
     }
@@ -169,14 +149,8 @@ export function AudioCall({ visible, onClose, otherUserId, otherUserName, postId
       const offer = await peerConnectionRef.current.createOffer();
       await peerConnectionRef.current.setLocalDescription(offer);
 
-      if (wsRef.current && user?.id) {
-        wsRef.current.send(JSON.stringify({
-          type: 'offer',
-          offer,
-          to: otherUserId,
-          from: user.id,
-          postId,
-        }));
+      if (socketRef.current && user?.id) {
+        socketRef.current.emit('call-user', { to: otherUserId, offer, postId });
       }
     } catch (err: any) {
       console.error('Failed to create offer:', err);
@@ -191,14 +165,8 @@ export function AudioCall({ visible, onClose, otherUserId, otherUserName, postId
       const answer = await peerConnectionRef.current.createAnswer();
       await peerConnectionRef.current.setLocalDescription(answer);
 
-      if (wsRef.current) {
-        wsRef.current.send(JSON.stringify({
-          type: 'answer',
-          answer,
-          to: otherUserId,
-          from: user?.id,
-          postId,
-        }));
+      if (socketRef.current) {
+        socketRef.current.emit('call-accepted', { to: otherUserId, answer });
       }
     } catch (err: any) {
       console.error('Failed to handle offer:', err);
@@ -247,9 +215,9 @@ export function AudioCall({ visible, onClose, otherUserId, otherUserName, postId
       peerConnectionRef.current = null;
     }
 
-    if (wsRef.current) {
-      wsRef.current.close();
-      wsRef.current = null;
+    if (socketRef.current) {
+      socketRef.current.close();
+      socketRef.current = null;
     }
 
     setCallStatus('ended');

@@ -459,8 +459,11 @@ export default function FeedScreen() {
       Alert.alert("Permission needed", "Please grant camera roll permissions");
       return;
     }
+    const anyPicker = ImagePicker as any;
+    const mediaType = anyPicker.MediaType?.Images ?? ImagePicker.MediaType?.Images ?? anyPicker.MediaType?.All ?? ImagePicker.MediaType?.All;
+
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      mediaTypes: mediaType as any,
       allowsEditing: true,
       quality: 0.8,
     });
@@ -499,8 +502,11 @@ export default function FeedScreen() {
       Alert.alert("Permission needed", "Please grant camera roll permissions");
       return;
     }
+    const anyPicker = ImagePicker as any;
+    const mediaType = anyPicker.MediaType?.Videos ?? ImagePicker.MediaType?.Videos ?? anyPicker.MediaType?.All ?? ImagePicker.MediaType?.All;
+
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Videos,
+      mediaTypes: mediaType as any,
       allowsEditing: true,
       quality: 0.8,
     });

@@ -15,7 +15,7 @@ export default function CheckoutScreen() {
   const { user } = useAuth();
   const [cart, setCart] = useState<Cart | null>(null);
   const [loading, setLoading] = useState(false);
-  const [selectedProvider] = useState<'paypal'>('paypal');
+  const [selectedProvider, setSelectedProvider] = useState<'paypal' | 'bank'>('paypal');
   const [processing, setProcessing] = useState(false);
   const [orderId, setOrderId] = useState<string | null>(null);
 
@@ -53,22 +53,30 @@ export default function CheckoutScreen() {
         approvalUrl?: string;
         amount: number;
         currency: string;
-      }>('/payments/checkout/create-intent', {}, user.token);
+      }>('/payments/checkout/create-intent', { provider: selectedProvider }, user.token);
 
       setOrderId(response.orderId);
 
-      // In a real app, open PayPal approval URL in WebView
-      Alert.alert(
-        'PayPal Payment',
-        'PayPal order created. In production, open PayPal approval URL in WebView.',
-        [
+      if (selectedProvider === 'paypal') {
+        // In a real app, open PayPal approval URL in WebView
+        Alert.alert(
+          'PayPal Payment',
+          'PayPal order created. In production, open PayPal approval URL in WebView.',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            {
+              text: 'Simulate Success',
+              onPress: () => confirmPayment(response.orderId, response.paypalOrderId || ''),
+            },
+          ]
+        );
+      } else {
+        // Bank transfer flow: show instructions and allow user to confirm after transfer
+        Alert.alert('Bank Transfer', response.instructions || 'Please follow bank transfer instructions', [
           { text: 'Cancel', style: 'cancel' },
-          {
-            text: 'Simulate Success',
-            onPress: () => confirmPayment(response.orderId, response.paypalOrderId || ''),
-          },
-        ]
-      );
+          { text: 'Simulate Transfer Complete', onPress: () => confirmPayment(response.orderId, '') },
+        ]);
+      }
     } catch (err: any) {
       const errorCode = err.response?.data?.code;
       const errorMessage = err.response?.data?.message || err.message;
@@ -216,13 +224,28 @@ export default function CheckoutScreen() {
         {/* Payment Methods */}
         <View style={styles.section}>
           <ThemedText style={styles.sectionTitle}>Payment Method</ThemedText>
-          <Pressable style={[styles.paymentMethod, styles.paymentMethodSelected]}>
-            <MaterialIcons name="radio-button-checked" size={24} color={brandYellow} />
+          <Pressable
+            style={[styles.paymentMethod, selectedProvider === 'paypal' && styles.paymentMethodSelected]}
+            onPress={() => setSelectedProvider('paypal')}
+          >
+            <MaterialIcons name={selectedProvider === 'paypal' ? 'radio-button-checked' : 'radio-button-unchecked'} size={24} color={brandYellow} />
             <View style={styles.paymentMethodInfo}>
               <ThemedText style={styles.paymentMethodName}>PayPal</ThemedText>
               <ThemedText style={styles.paymentMethodDesc}>Pay with your PayPal account</ThemedText>
             </View>
             <MaterialIcons name="lock" size={20} color="#666" />
+          </Pressable>
+
+          <Pressable
+            style={[styles.paymentMethod, selectedProvider === 'bank' && styles.paymentMethodSelected]}
+            onPress={() => setSelectedProvider('bank')}
+          >
+            <MaterialIcons name={selectedProvider === 'bank' ? 'radio-button-checked' : 'radio-button-unchecked'} size={24} color={brandYellow} />
+            <View style={styles.paymentMethodInfo}>
+              <ThemedText style={styles.paymentMethodName}>Bank Transfer</ThemedText>
+              <ThemedText style={styles.paymentMethodDesc}>Pay via bank transfer (manual)</ThemedText>
+            </View>
+            <MaterialIcons name="account-balance" size={20} color="#666" />
           </Pressable>
         </View>
 

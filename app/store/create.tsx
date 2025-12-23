@@ -14,7 +14,7 @@ import { API_URL } from '@/constants/config';
 
 export default function CreateStoreScreen() {
   const router = useRouter();
-  const { user } = useAuth();
+  const { user, updateUser } = useAuth();
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [logoUri, setLogoUri] = useState<string | null>(null);
@@ -29,9 +29,8 @@ export default function CreateStoreScreen() {
       return;
     }
 
-    const mediaType =
-      (ImagePicker as any).MediaType?.Images ??
-      (ImagePicker as any).MediaTypeOptions?.Images;
+    const anyPicker = ImagePicker as any;
+    const mediaType = anyPicker.MediaType?.Images ?? anyPicker.MediaTypeOptions?.Images ?? ImagePicker.MediaType?.Images ?? ImagePicker.MediaTypeOptions?.Images;
 
     const result = await ImagePicker.launchImageLibraryAsync({
       /**
@@ -116,6 +115,12 @@ export default function CreateStoreScreen() {
         },
         user.token
       );
+      // Refresh auth context so `user.store` is populated
+      try {
+        if (user.token) await updateUser(user.token);
+      } catch (e) {
+        // ignore
+      }
 
       Alert.alert('Success', 'Store created!', [
         {
