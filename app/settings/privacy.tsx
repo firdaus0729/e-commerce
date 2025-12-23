@@ -123,7 +123,10 @@ export default function PrivacyScreen() {
 
         <Section title="10. Contact Us">
           <ThemedText style={styles.listItem}>If you have questions or concerns about this Privacy Policy, please contact us at:</ThemedText>
-          <ThemedText style={styles.contact}>Miranda Merchbish Email: info@mirandamerchofficial.com</ThemedText>
+          <ThemedText style={styles.contact}>Miranda Merchbish Email: </ThemedText>
+          <Pressable onPress={() => Linking.openURL('mailto:info@mirandamerchofficial.com')}>
+            <ThemedText style={styles.link}>info@mirandamerchofficial.com</ThemedText>
+          </Pressable>
           <ThemedText style={styles.contact}>Website: </ThemedText>
           <Pressable onPress={() => Linking.openURL('https://mirandamerchbish.com')}>
             <ThemedText style={styles.link}>https://mirandamerchbish.com</ThemedText>
