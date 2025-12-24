@@ -8,7 +8,7 @@ if (typeof window !== 'undefined' && window.location) {
 	runtimeApi = `${window.location.protocol}//${window.location.host}`;
 }
 
-const rawApi = buildEnvApi ?? expoExtraApi ?? runtimeApi ?? 'https://e-commerce-social-app.onrender.com';
+const rawApi = buildEnvApi ?? expoExtraApi ?? runtimeApi ?? 'http://192.168.145.108:4000';
 // Normalize: remove trailing slash
 console.log(rawApi.replace(/\/+$/, ''));
 export const API_URL = rawApi.replace(/\/+$/, '');

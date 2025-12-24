@@ -242,6 +242,9 @@ export function LiveStreamBroadcaster({ stream, onStop }: LiveStreamBroadcasterP
 
       <View style={styles.overlay}>
         <View style={styles.header}>
+          <Pressable onPress={onStop} style={styles.backButton}>
+            <MaterialIcons name="arrow-back" size={24} color="#fff" />
+          </Pressable>
           <View style={styles.viewerCount}>
             <MaterialIcons name="visibility" size={16} color="#fff" />
             <ThemedText style={styles.viewerCountText}>{viewerCount}</ThemedText>
@@ -291,6 +294,15 @@ const styles = StyleSheet.create({
     padding: 16,
     paddingTop: Platform.OS === 'ios' ? 50 : 16,
     backgroundColor: 'rgba(0,0,0,0.5)',
+    gap: 12,
+  },
+  backButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   viewerCount: {
     flexDirection: 'row',

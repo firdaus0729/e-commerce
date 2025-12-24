@@ -1,5 +1,4 @@
 import { Image, StyleSheet, View } from 'react-native';
-import { ThemedText } from './themed-text';
 
 export function DemisandLogo({ size = 28 }: { size?: number }) {
   return (

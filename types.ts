@@ -191,3 +191,49 @@ export type StreamComment = {
   updatedAt: string;
 };
 
+export type StoryMediaType = 'image' | 'video';
+
+export type Story = {
+  _id: string;
+  user: {
+    _id: string;
+    name: string;
+    profilePhoto?: string;
+  };
+  mediaUrl: string;
+  mediaType: StoryMediaType;
+  caption?: string;
+  views: string[];
+  likes: string[];
+  viewsCount?: number;
+  likesCount?: number;
+  isViewed?: boolean;
+  isLiked?: boolean;
+  expiresAt: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type StoryFeedItem = {
+  user: {
+    _id: string;
+    name: string;
+    profilePhoto?: string;
+  };
+  stories: Story[];
+  allViewed: boolean;
+};
+
+export type StoryReply = {
+  _id: string;
+  story: string;
+  user: {
+    _id: string;
+    name: string;
+    profilePhoto?: string;
+  };
+  text: string;
+  createdAt: string;
+  updatedAt: string;
+};
+

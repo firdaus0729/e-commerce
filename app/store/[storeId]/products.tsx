@@ -8,6 +8,7 @@ import { Header } from '@/components/header';
 import { api } from '@/lib/api';
 import { Product, Store, Cart } from '@/types';
 import { useAuth } from '@/hooks/use-auth';
+import { useCart } from '@/hooks/use-cart';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { brandYellow } from '@/constants/theme';
 
@@ -15,6 +16,7 @@ export default function StoreProductsScreen() {
   const router = useRouter();
   const { storeId, slug } = useLocalSearchParams<{ storeId: string; slug?: string }>();
   const { user } = useAuth();
+  const { addToCart: addToCartRedux } = useCart();
 
   const [store, setStore] = useState<Store | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
@@ -71,8 +73,18 @@ export default function StoreProductsScreen() {
       return Alert.alert('Login required', 'Please log in to add items to cart.');
     }
     try {
-      await api.post<Cart>('/cart/items', { productId, quantity }, user.token);
-      Alert.alert('Cart', 'Added to cart');
+      // Update product stock optimistically
+      setProducts(prevProducts => 
+        prevProducts.map(p => 
+          p._id === productId 
+            ? { ...p, stock: (p.stock ?? 0) - quantity }
+            : p
+        )
+      );
+      // Add to cart via Redux
+      await addToCartRedux(productId, quantity, user.token);
+      // Reload products to get accurate stock from server
+      await load();
     } catch (err: any) {
       Alert.alert('Cart', err.message || 'Failed to add to cart');
     }

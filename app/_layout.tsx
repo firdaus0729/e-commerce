@@ -5,7 +5,7 @@ import 'react-native-reanimated';
 
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import ErrorBoundary from '@/components/ErrorBoundary';
-import { AuthProvider } from '@/contexts/AuthContext';
+import { ReduxProvider } from '@/store/ReduxProvider';
 
 export const unstable_settings = {
   anchor: '(tabs)',
@@ -16,7 +16,7 @@ export default function RootLayout() {
 
   return (
     <ErrorBoundary>
-      <AuthProvider>
+      <ReduxProvider>
         <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
           <Stack>
             <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
@@ -24,7 +24,7 @@ export default function RootLayout() {
           </Stack>
           <StatusBar style="auto" />
         </ThemeProvider>
-      </AuthProvider>
+      </ReduxProvider>
     </ErrorBoundary>
   );
 }

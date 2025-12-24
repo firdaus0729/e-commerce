@@ -1,15 +1,18 @@
 import { Tabs, useRouter } from 'expo-router';
 import React, { useEffect } from 'react';
+import { View, Text, StyleSheet } from 'react-native';
 
 import { HapticTab } from '@/components/haptic-tab';
 import { MaterialIcons } from '@expo/vector-icons';
 import { brandYellow } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { useAuth } from '@/contexts/AuthContext';
+import { useAuth } from '@/hooks/use-auth';
+import { useCart } from '@/hooks/use-cart';
 
 export default function TabLayout() {
   const colorScheme = useColorScheme();
   const { user, loading } = useAuth();
+  const { cartItemCount } = useCart();
   const router = useRouter();
 
   useEffect(() => {
@@ -62,7 +65,14 @@ export default function TabLayout() {
         options={{
           title: 'Cart',
           tabBarIcon: ({ focused }) => (
-            <MaterialIcons name="shopping-cart" size={24} color={focused ? '#000000' : '#9BA1A6'} />
+            <View style={styles.iconContainer}>
+              <MaterialIcons name="shopping-cart" size={24} color={focused ? '#000000' : '#9BA1A6'} />
+              {cartItemCount > 0 && (
+                <View style={styles.badge}>
+                  <Text style={styles.badgeText}>{cartItemCount > 99 ? '99+' : cartItemCount}</Text>
+                </View>
+              )}
+            </View>
           ),
         }}
       />
@@ -87,3 +97,28 @@ export default function TabLayout() {
     </Tabs>
   );
 }
+
+const styles = StyleSheet.create({
+  iconContainer: {
+    position: 'relative',
+  },
+  badge: {
+    position: 'absolute',
+    top: -6,
+    right: -8,
+    backgroundColor: '#EF4444',
+    borderRadius: 10,
+    minWidth: 18,
+    height: 18,
+    paddingHorizontal: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: '#FFFEF9',
+  },
+  badgeText: {
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontWeight: '700',
+  },
+});

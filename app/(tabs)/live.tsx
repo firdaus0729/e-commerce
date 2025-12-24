@@ -216,6 +216,7 @@ export default function LiveScreen() {
     <ThemedView style={styles.container}>
       <Header
         showSearch
+        showBack
         rightAction={{
           label: 'Go Live',
           icon: 'videocam',

@@ -60,9 +60,35 @@ const request = async <T>(path: string, method: Method = 'GET', body?: unknown, 
     body: body ? JSON.stringify(body) : undefined,
   });
   if (!res.ok) {
-    const error = await res.json().catch(() => ({}));
-    console.warn('[api] error', method, url, error);
-    throw new Error(error.message ?? 'Request failed');
+    let error: any = {};
+    const status = res.status;
+    const statusText = res.statusText;
+    
+    try {
+      const contentType = res.headers.get('content-type');
+      if (contentType && contentType.includes('application/json')) {
+        error = await res.json();
+      } else {
+        const text = await res.text().catch(() => '');
+        error = { message: text || `Request failed: ${status} ${statusText}` };
+      }
+    } catch (e) {
+      // If we can't parse the response, try to get text
+      try {
+        const text = await res.text().catch(() => '');
+        error = { message: text || `Request failed: ${status} ${statusText}` };
+      } catch (e2) {
+        error = { message: `Request failed: ${status} ${statusText}` };
+      }
+    }
+    
+    console.warn('[api] error', method, url, { 
+      status, 
+      statusText, 
+      error,
+      hasMessage: !!error.message 
+    });
+    throw new Error(error.message ?? `Request failed: ${status} ${statusText}`);
   }
   return res.json() as Promise<T>;
 };
@@ -75,7 +101,6 @@ export const api = {
   delete:<T>(path: string, token?: string)               => request<T>(path, 'DELETE', undefined, token),
   upload: async <T>(path: string, formData: FormData, token?: string): Promise<T> => {
     const baseUrl = `${API_URL}${path}`;
-
     // Always try to get token from storage first (most reliable)
     // Only use provided token if storage doesn't have one
     let authToken = token;

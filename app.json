@@ -1,15 +1,19 @@
 {
   "expo": {
-    "name": "my-first-app",
+    "name": "Demisand",
     "slug": "tiktokshop",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
+    "icon": "./assets/images/icon.jpg",
     "scheme": "myfirstapp",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "y",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -31,7 +35,7 @@
       [
         "expo-splash-screen",
         {
-          "image": "./assets/images/splash-icon.png",
+          "image": "./assets/images/logo.jpg",
           "imageWidth": 200,
           "resizeMode": "contain",
           "backgroundColor": "#ffffff",
@@ -48,7 +52,7 @@
     },
     "extra": {
       "router": {},
-      "apiUrl": "https://e-commerce-social-app.onrender.com",
+      "apiUrl": "http://192.168.145.108:4000",
       "eas": {
         "projectId": "9a73dbe4-7494-4a81-a025-78376f8c443a"
       }

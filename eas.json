@@ -8,13 +8,13 @@
       "developmentClient": true,
       "distribution": "internal",
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://e-commerce-social-app.onrender.com"
+        "EXPO_PUBLIC_API_URL": "http://192.168.145.108:4000"
       }
     },
     "preview": {
       "distribution": "internal",
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://e-commerce-social-app.onrender.com"
+        "EXPO_PUBLIC_API_URL": "http://192.168.145.108:4000"
       },
       "android": {
         "buildType": "apk"
@@ -22,7 +22,7 @@
     },
     "production": {
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://e-commerce-social-app.onrender.com"
+        "EXPO_PUBLIC_API_URL": "http://192.168.145.108:4000"
       },
       "android": {
         "buildType": "apk"

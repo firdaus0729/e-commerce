@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import {
   Alert,
   FlatList,
@@ -15,7 +15,7 @@ import {
   ActivityIndicator,
   StatusBar,
 } from "react-native";
-import { useRouter } from "expo-router";
+import { useRouter, useFocusEffect } from "expo-router";
 import * as ImagePicker from "expo-image-picker";
 import * as DocumentPicker from "expo-document-picker";
 // Using expo-av for now (will migrate to expo-audio in future SDK)
@@ -29,8 +29,11 @@ import { GifPicker } from "@/components/gif-picker";
 import { VideoCall } from "@/components/video-call";
 import { AudioCall } from "@/components/audio-call";
 import { CallInitiationModal } from "@/components/call-initiation-modal";
+import { StoryViewer } from "@/components/story/StoryViewer";
+import { StoryIndicator } from "@/components/story/StoryIndicator";
+import { StoryCreationModal } from "@/components/story/StoryCreationModal";
 import { api } from "@/lib/api";
-import { Post, Message, PostComment, MessageType } from "@/types";
+import { Post, Message, PostComment, MessageType, StoryFeedItem } from "@/types";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { brandYellow } from "@/constants/theme";
 import { useAuth } from "@/hooks/use-auth";
@@ -90,6 +93,10 @@ export default function FeedScreen() {
     { _id: string; name: string; profilePhoto?: string }[]
   >([]);
   const [savedPosts, setSavedPosts] = useState<Record<string, boolean>>({});
+  const [stories, setStories] = useState<StoryFeedItem[]>([]);
+  const [showStoryViewer, setShowStoryViewer] = useState(false);
+  const [showStoryCreation, setShowStoryCreation] = useState(false);
+  const [selectedStoryUserIndex, setSelectedStoryUserIndex] = useState(0);
 
   // Admin users are redirected to the dedicated admin page
   useEffect(() => {
@@ -97,6 +104,63 @@ export default function FeedScreen() {
       router.replace("/admin" as any);
     }
   }, [user?.role, router]);
+
+  const loadStories = async () => {
+    if (!user?.token) return;
+    try {
+      const data = await api.get<StoryFeedItem[]>("/stories/feed", user.token);
+      
+      // Remove duplicates by user ID (in case backend returns duplicates)
+      const seenUserIds = new Set<string>();
+      const uniqueStories = data.filter((item) => {
+        const userId = item.user._id.toString();
+        if (seenUserIds.has(userId)) {
+          return false; // Skip duplicate
+        }
+        seenUserIds.add(userId);
+        return true;
+      });
+      
+      // Check if user's stories are already in the feed
+      const userStoriesInFeed = uniqueStories.find(item => 
+        item.user._id.toString() === user.id.toString()
+      );
+      
+      // Only add user's stories if they're not already in the feed
+      if (!userStoriesInFeed) {
+        try {
+          const myStories = await api.get<any[]>("/stories/me", user.token);
+          if (myStories.length > 0) {
+            const myStoryItem: StoryFeedItem = {
+              user: {
+                _id: user.id,
+                name: user.name,
+                profilePhoto: user.profilePhoto,
+              },
+              stories: myStories,
+              allViewed: false,
+            };
+            uniqueStories.unshift(myStoryItem);
+          }
+        } catch (err) {
+          console.log("Failed to load own stories:", err);
+        }
+      } else {
+        // Move user's stories to the beginning if they exist in feed
+        const userIndex = uniqueStories.findIndex(item => 
+          item.user._id.toString() === user.id.toString()
+        );
+        if (userIndex > 0) {
+          const [userStories] = uniqueStories.splice(userIndex, 1);
+          uniqueStories.unshift(userStories);
+        }
+      }
+      
+      setStories(uniqueStories);
+    } catch (err) {
+      console.log("Failed to load stories:", err);
+    }
+  };
 
   const load = async () => {
     if (!user?.token) return;
@@ -118,6 +182,7 @@ export default function FeedScreen() {
       // Load unread counts for all posts
       await loadUnreadCounts(data);
       await loadFollowers();
+      await loadStories();
     } catch (err) {
       console.log("Failed to load posts:", err);
     } finally {
@@ -165,6 +230,15 @@ export default function FeedScreen() {
       load();
     }
   }, [user?.token, authLoading]);
+
+  // Refresh unread counts when page is focused
+  useFocusEffect(
+    useCallback(() => {
+      if (user?.token && posts.length > 0) {
+        loadUnreadCounts(posts);
+      }
+    }, [user?.token, posts.length])
+  );
 
   // Track view when post is displayed
   const trackView = async (postId: string) => {
@@ -223,48 +297,64 @@ export default function FeedScreen() {
     );
   };
 
-  const renderStories = () => (
-    <View style={styles.storiesContainer}>
-      <View style={styles.storiesHeader}>
-        <ThemedText style={styles.storiesTitle}>Stories</ThemedText>
-        <Pressable>
-          <View style={styles.sortRow}>
-            <ThemedText style={styles.sortText}>Sort by Time</ThemedText>
-            <IconSymbol name="chevron.down" size={12} color="#666" />
-          </View>
-        </Pressable>
-      </View>
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={styles.storiesScroll}
-      >
-        <Pressable style={styles.storyCircle}>
-          <View style={[styles.storyCircleInner, styles.addStory]}>
-            <IconSymbol name="plus" size={20} color="#1A1A1A" />
-          </View>
-        </Pressable>
-        {followers.map((follower) => (
-          <Pressable key={follower._id} style={styles.storyCircle}>
-            <View style={styles.storyCircleInner}>
-              {follower.profilePhoto ? (
-                <Image
-                  source={{ uri: follower.profilePhoto }}
-                  style={styles.storyAvatarImage}
-                />
-              ) : (
-                <View style={styles.storyAvatar}>
-                  <ThemedText style={styles.storyAvatarText}>
-                    {follower.name.charAt(0).toUpperCase()}
-                  </ThemedText>
+  const renderStories = () => {
+    if (stories.length === 0 && !user?.token) return null;
+
+    return (
+      <View style={styles.storiesContainer}>
+        <View style={styles.storiesHeader}>
+          <ThemedText style={styles.storiesTitle}>Stories</ThemedText>
+        </View>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.storiesScroll}
+          contentContainerStyle={styles.storiesScrollContent}
+        >
+          {/* Create story button (own story) */}
+          {user?.token && (
+            <Pressable
+              onPress={() => setShowStoryCreation(true)}
+              style={styles.storyIndicatorWrapper}
+            >
+              <View style={styles.storyCircle}>
+                <View style={[styles.storyCircleInner, styles.addStory]}>
+                  <IconSymbol name="plus" size={20} color="#1A1A1A" />
                 </View>
-              )}
-            </View>
-          </Pressable>
-        ))}
-      </ScrollView>
-    </View>
-  );
+              </View>
+              <ThemedText style={styles.storyUsername} numberOfLines={1}>
+                Your Story
+              </ThemedText>
+            </Pressable>
+          )}
+          {/* Story indicators */}
+          {stories.map((storyItem, index) => {
+            // Use a unique key that includes both user ID and index to prevent duplicates
+            const uniqueKey = `${storyItem.user._id}-${index}`;
+            return (
+              <Pressable
+                key={uniqueKey}
+                onPress={() => {
+                  setSelectedStoryUserIndex(index);
+                  setShowStoryViewer(true);
+                }}
+                style={styles.storyIndicatorWrapper}
+              >
+                <StoryIndicator
+                  item={storyItem}
+                  onPress={() => {
+                    setSelectedStoryUserIndex(index);
+                    setShowStoryViewer(true);
+                  }}
+                  isOwnStory={storyItem.user._id === user?.id}
+                />
+              </Pressable>
+            );
+          })}
+        </ScrollView>
+      </View>
+    );
+  };
 
   const formatTimeAgo = (dateString: string): string => {
     const date = new Date(dateString);
@@ -441,6 +531,10 @@ export default function FeedScreen() {
       );
       setMessages([...messages, newMessage]);
       setMessageText("");
+      // Refresh unread counts after sending message
+      if (selectedPost) {
+        await loadUnreadCounts([selectedPost]);
+      }
       load();
       if (showPostOwnerChatList) {
         await loadPostOwnerChats(selectedPost._id);
@@ -1565,6 +1659,26 @@ export default function FeedScreen() {
           postId={selectedPost._id}
         />
       )}
+
+      {/* Story Viewer */}
+      <StoryViewer
+        visible={showStoryViewer}
+        feed={stories}
+        initialUserIndex={selectedStoryUserIndex}
+        onClose={() => {
+          setShowStoryViewer(false);
+          loadStories(); // Refresh stories after viewing
+        }}
+      />
+
+      {/* Story Creation Modal */}
+      <StoryCreationModal
+        visible={showStoryCreation}
+        onClose={() => setShowStoryCreation(false)}
+        onStoryCreated={() => {
+          loadStories(); // Refresh stories after creation
+        }}
+      />
     </ThemedView>
   );
 }
@@ -1607,8 +1721,21 @@ const styles = StyleSheet.create({
   storiesScroll: {
     paddingHorizontal: 16,
   },
-  storyCircle: {
+  storiesScrollContent: {
+    paddingRight: 16,
+  },
+  storyIndicatorWrapper: {
     marginRight: 12,
+    alignItems: 'center',
+  },
+  storyCircle: {
+    marginRight: 0,
+  },
+  storyUsername: {
+    marginTop: 4,
+    fontSize: 12,
+    textAlign: 'center',
+    maxWidth: 70,
   },
   storyCircleInner: {
     width: 64,
