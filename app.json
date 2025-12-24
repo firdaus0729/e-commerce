@@ -48,7 +48,7 @@
     },
     "extra": {
       "router": {},
-      "apiUrl": "http://e-commerce-social-app.onrender.com",
+      "apiUrl": "https://e-commerce-social-app.onrender.com",
       "eas": {
         "projectId": "9a73dbe4-7494-4a81-a025-78376f8c443a"
       }
