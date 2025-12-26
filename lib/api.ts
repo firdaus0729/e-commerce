@@ -98,7 +98,7 @@ export const api = {
   post:  <T>(path: string, body: unknown, token?: string) => request<T>(path, 'POST',  body,      token),
   patch: <T>(path: string, body: unknown, token?: string) => request<T>(path, 'PATCH', body,      token),
   put:   <T>(path: string, body: unknown, token?: string) => request<T>(path, 'PUT',   body,      token),
-  delete:<T>(path: string, token?: string)               => request<T>(path, 'DELETE', undefined, token),
+  delete:<T>(path: string, body?: unknown, token?: string) => request<T>(path, 'DELETE', body, token),
   upload: async <T>(path: string, formData: FormData, token?: string): Promise<T> => {
     const baseUrl = `${API_URL}${path}`;
     // Always try to get token from storage first (most reliable)

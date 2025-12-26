@@ -2,7 +2,7 @@ import { View, StyleSheet, Modal, Pressable } from 'react-native';
 import { ThemedText } from './themed-text';
 import { Image } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
-import { brandYellow } from '@/constants/theme';
+import { brandYellow, brandYellowDark } from '@/constants/theme';
 
 interface CallInitiationModalProps {
   visible: boolean;
@@ -137,13 +137,13 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   audioButton: {
-    backgroundColor: '#4FC3F7',
+    backgroundColor: brandYellow,
   },
   cancelButton: {
     backgroundColor: '#fff',
   },
   videoButton: {
-    backgroundColor: '#4FC3F7',
+    backgroundColor: brandYellow,
   },
   buttonLabel: {
     fontSize: 12,

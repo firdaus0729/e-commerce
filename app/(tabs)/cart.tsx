@@ -9,6 +9,7 @@ import { CartItem } from '@/types';
 import { useAuth } from '@/hooks/use-auth';
 import { useCart } from '@/hooks/use-cart';
 import { MaterialIcons } from '@expo/vector-icons';
+import { brandYellow, brandYellowDark, brandYellowLight } from '@/constants/theme';
 
 export default function CartScreen() {
   const router = useRouter();
@@ -68,7 +69,7 @@ export default function CartScreen() {
           <View style={styles.emptyCartIconContainer}>
             <View style={styles.emptyCartCircle}>
               <View style={styles.cartIconWrapper}>
-                <MaterialIcons name="shopping-cart" size={100} color="#1E40AF" style={styles.cartIcon} />
+                <MaterialIcons name="shopping-cart" size={100} color={brandYellow} style={styles.cartIcon} />
               </View>
             </View>
           </View>
@@ -154,7 +155,7 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#1E40AF',
+    color: brandYellow,
     letterSpacing: 0.5,
     textTransform: 'uppercase',
   },
@@ -183,10 +184,10 @@ const styles = StyleSheet.create({
     width: 200,
     height: 200,
     borderRadius: 100,
-    backgroundColor: '#E0E7FF',
+    backgroundColor: brandYellowLight,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#1E40AF',
+    shadowColor: brandYellow,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.15,
     shadowRadius: 16,
@@ -195,7 +196,7 @@ const styles = StyleSheet.create({
   emptyTitle: {
     fontSize: 24,
     fontWeight: '700',
-    color: '#1E40AF',
+    color: brandYellow,
     marginBottom: 12,
     textAlign: 'center',
   },
@@ -207,13 +208,13 @@ const styles = StyleSheet.create({
     lineHeight: 24,
   },
   startShoppingButton: {
-    backgroundColor: '#1E40AF',
+    backgroundColor: brandYellow,
     paddingHorizontal: 32,
     paddingVertical: 16,
     borderRadius: 12,
     minWidth: 200,
     alignItems: 'center',
-    shadowColor: '#1E40AF',
+    shadowColor: brandYellow,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,
@@ -253,7 +254,7 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
   },
   removeButtonText: {
-    color: '#EF4444',
+    color: brandYellowDark,
     fontSize: 14,
     fontWeight: '500',
   },
@@ -271,11 +272,11 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   checkoutButton: {
-    backgroundColor: '#1E40AF',
+    backgroundColor: brandYellow,
     padding: 16,
     borderRadius: 12,
     alignItems: 'center',
-    shadowColor: '#1E40AF',
+    shadowColor: brandYellow,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,

@@ -1,14 +1,14 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import { Alert, FlatList, Image, Pressable, RefreshControl, StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { Header } from '@/components/header';
-import { api } from '@/lib/api';
-import { Product, Store } from '@/types';
-import { useAuth } from '@/hooks/use-auth';
-import { IconSymbol } from '@/components/ui/icon-symbol';
-import { brandYellow } from '@/constants/theme';
+import { ThemedText } from '../../components/themed-text';
+import { ThemedView } from '../../components/themed-view';
+import { Header } from '../../components/header';
+import { api } from '../../lib/api';
+import { Product, Store } from '../../types';
+import { useAuth } from '../../hooks/use-auth';
+import { IconSymbol } from '../../components/ui/icon-symbol';
+import { brandYellow } from '../../constants/theme';
 import { MaterialIcons } from '@expo/vector-icons';
 
 type TabType = 'all' | 'my';
@@ -25,12 +25,16 @@ export default function StoresScreen() {
   const load = async () => {
     setRefreshing(true);
     try {
-      const all = await api.get<Store[]>('/stores');
+      // Load stores and products in parallel
+      const [all, products] = await Promise.all([
+        api.get<Store[]>('/stores'),
+        api.get<Product[]>('/products'),
+      ]);
+      
       setStores(all);
-
-      const products = await api.get<Product[]>('/products');
       setAllProducts(products);
       
+      // Filter my stores (non-blocking)
       if (user?.token && user.id) {
         const my = all.filter((s) => s.owner?.toString() === user.id);
         setMyStores(my);
@@ -38,7 +42,7 @@ export default function StoresScreen() {
         setMyStores([]);
       }
     } catch (err) {
-      console.log(err);
+      if (__DEV__) console.log('Failed to load stores:', err);
     } finally {
       setRefreshing(false);
     }
@@ -69,7 +73,7 @@ export default function StoresScreen() {
     router.push('/store/create');
   };
 
-  const getStoreStats = (storeId: string) => {
+  const getStoreStats = useCallback((storeId: string) => {
     const products = allProducts.filter((p) => p.store === storeId);
     const count = products.length;
     const avg =
@@ -77,9 +81,9 @@ export default function StoresScreen() {
         ? 0
         : products.reduce((sum, p) => sum + (p.averageRating ?? 0), 0) / count;
     return { count, avg: Number(avg.toFixed(1)) };
-  };
+  }, [allProducts]);
 
-  const renderStoreCard = (item: Store, mode: TabType) => {
+  const renderStoreCard = useCallback((item: Store, mode: TabType) => {
     const stats = getStoreStats(item._id);
     return (
       <Pressable
@@ -135,7 +139,7 @@ export default function StoresScreen() {
       </View>
     </Pressable>
   );
-  };
+  }, [router, getStoreStats]);
 
   return (
     <ThemedView style={styles.container}>
@@ -173,6 +177,11 @@ export default function StoresScreen() {
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={load} />}
           contentContainerStyle={styles.list}
           showsVerticalScrollIndicator={false}
+          removeClippedSubviews={true}
+          maxToRenderPerBatch={10}
+          updateCellsBatchingPeriod={50}
+          initialNumToRender={10}
+          windowSize={10}
         />
       ) : (
         <>
@@ -191,6 +200,11 @@ export default function StoresScreen() {
               refreshControl={<RefreshControl refreshing={refreshing} onRefresh={load} />}
               contentContainerStyle={styles.list}
               showsVerticalScrollIndicator={false}
+              removeClippedSubviews={true}
+              maxToRenderPerBatch={10}
+              updateCellsBatchingPeriod={50}
+              initialNumToRender={10}
+              windowSize={10}
             />
           )}
         </>

@@ -27,10 +27,16 @@ export default function ProductDetailScreen() {
     if (!productId) return;
     setLoading(true);
     try {
-      const p = await api.get<Product>(`/products/${productId}`);
-      const r = await api.get<Review[]>(`/products/${productId}/reviews`);
+      // Load product and reviews in parallel
+      const [p, r] = await Promise.all([
+        api.get<Product>(`/products/${productId}`),
+        api.get<Review[]>(`/products/${productId}/reviews`),
+      ]);
+      
       setProduct(p);
       setReviews(r);
+      
+      // Find existing review
       if (user?.id) {
         const mine = r.find((rev) => rev.user.id === user.id);
         setExistingReview(mine ?? null);
@@ -38,14 +44,15 @@ export default function ProductDetailScreen() {
         setExistingReview(null);
       }
 
-      // Determine if current user owns the store for this product
+      // Determine if current user owns the store (non-blocking)
       if (user?.token && user.id && p.store) {
-        try {
-          const store = await api.get<Store>(`/stores/id/${p.store}`, user.token);
-          setIsOwner(store.owner?.toString?.() === user.id);
-        } catch {
-          setIsOwner(false);
-        }
+        api.get<Store>(`/stores/id/${p.store}`, user.token)
+          .then((store) => {
+            setIsOwner(store.owner?.toString?.() === user.id);
+          })
+          .catch(() => {
+            setIsOwner(false);
+          });
       } else {
         setIsOwner(false);
       }

@@ -31,15 +31,21 @@ export default function StoreProductsScreen() {
     if (!storeId) return;
     setLoading(true);
     try {
-      const s = await api.get<Store>(`/stores/id/${storeId}`);
+      // Load store and products in parallel
+      const [s, p] = await Promise.all([
+        api.get<Store>(`/stores/id/${storeId}`),
+        api.get<Product[]>(`/products?store=${storeId}`),
+      ]);
+      
       setStore(s);
+      setProducts(p);
+      
+      // Set owner status (non-blocking)
       if (user?.id) {
         setIsOwner(s.owner?.toString() === user.id);
       } else {
         setIsOwner(false);
       }
-      const p = await api.get<Product[]>(`/products?store=${storeId}`);
-      setProducts(p);
     } catch (err: any) {
       Alert.alert('Store', err.message ?? 'Failed to load store');
     } finally {

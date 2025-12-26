@@ -102,6 +102,11 @@ export default function SearchScreen() {
               </ThemedText>
             </Pressable>
           )}
+          removeClippedSubviews={true}
+          maxToRenderPerBatch={20}
+          updateCellsBatchingPeriod={50}
+          initialNumToRender={20}
+          windowSize={10}
         />
       ) : (
         <FlatList
@@ -124,6 +129,11 @@ export default function SearchScreen() {
               </ThemedText>
             </Pressable>
           )}
+          removeClippedSubviews={true}
+          maxToRenderPerBatch={20}
+          updateCellsBatchingPeriod={50}
+          initialNumToRender={20}
+          windowSize={10}
         />
       )}
     </ThemedView>

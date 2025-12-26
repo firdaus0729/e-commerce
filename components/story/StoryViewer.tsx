@@ -21,6 +21,7 @@ import { useAuth } from '@/hooks/use-auth';
 import { MaterialIcons } from '@expo/vector-icons';
 import { ThemedText } from '../themed-text';
 import { ThemedView } from '../themed-view';
+import { brandYellow } from '@/constants/theme';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const STORY_DURATION = 5000; // 5 seconds per story
@@ -515,7 +516,7 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: '#007AFF',
+    backgroundColor: brandYellow,
     justifyContent: 'center',
     alignItems: 'center',
   },

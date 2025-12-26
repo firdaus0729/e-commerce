@@ -8,7 +8,7 @@ import { useAuth } from '@/hooks/use-auth';
 import { api } from '@/lib/api';
 import { webrtcStreamingClient } from '@/services/webrtc-streaming-client';
 import { Stream } from '@/types';
-import { brandYellow } from '@/constants/theme';
+import { brandYellow, brandYellowDark } from '@/constants/theme';
 import { StreamComments } from './StreamComments';
 
 interface LiveStreamBroadcasterProps {
@@ -319,7 +319,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   stopButton: {
-    backgroundColor: '#EF4444',
+    backgroundColor: brandYellowDark,
     paddingHorizontal: 20,
     paddingVertical: 10,
     borderRadius: 20,
@@ -345,7 +345,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   controlButtonActive: {
-    backgroundColor: '#EF4444',
+    backgroundColor: brandYellowDark,
   },
   loadingText: {
     marginTop: 16,

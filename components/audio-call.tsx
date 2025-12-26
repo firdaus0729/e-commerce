@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { View, StyleSheet, Modal, Pressable, Platform, Alert } from 'react-native';
 import { ThemedText } from './themed-text';
+import { brandYellowDark } from '@/constants/theme';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useAuth } from '@/hooks/use-auth';
 import { API_URL } from '@/constants/config';
@@ -10,7 +11,7 @@ interface AudioCallProps {
   onClose: () => void;
   otherUserId: string;
   otherUserName: string;
-  postId: string;
+  postId?: string; // Optional for direct calls
 }
 
 export function AudioCall({ visible, onClose, otherUserId, otherUserName, postId }: AudioCallProps) {
@@ -108,7 +109,7 @@ export function AudioCall({ visible, onClose, otherUserId, otherUserName, postId
       socketRef.current = socket;
 
       socket.on('connect', () => {
-        if (user?.token) {
+        if (user?.token && postId) {
           socket.emit('join', { postId });
         }
 
@@ -150,7 +151,7 @@ export function AudioCall({ visible, onClose, otherUserId, otherUserName, postId
       await peerConnectionRef.current.setLocalDescription(offer);
 
       if (socketRef.current && user?.id) {
-        socketRef.current.emit('call-user', { to: otherUserId, offer, postId });
+        socketRef.current.emit('call-user', { to: otherUserId, offer, postId: postId || 'direct' });
       }
     } catch (err: any) {
       console.error('Failed to create offer:', err);
@@ -340,10 +341,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   controlButtonActive: {
-    backgroundColor: '#EF4444',
+    backgroundColor: brandYellowDark,
   },
   endCallButton: {
-    backgroundColor: '#EF4444',
+    backgroundColor: brandYellowDark,
   },
 });
 

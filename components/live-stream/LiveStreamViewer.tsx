@@ -7,7 +7,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { useAuth } from '@/hooks/use-auth';
 import { webrtcStreamingClient } from '@/services/webrtc-streaming-client';
 import { Stream } from '@/types';
-import { brandYellow } from '@/constants/theme';
+import { brandYellow, brandYellowDark } from '@/constants/theme';
 import { StreamComments } from './StreamComments';
 
 interface LiveStreamViewerProps {
@@ -180,7 +180,7 @@ export function LiveStreamViewer({ stream, onClose }: LiveStreamViewerProps) {
   if (error) {
     return (
       <ThemedView style={styles.container}>
-        <MaterialIcons name="error-outline" size={48} color="#EF4444" />
+        <MaterialIcons name="error-outline" size={48} color={brandYellowDark} />
         <ThemedText style={styles.errorText}>{error}</ThemedText>
         <Pressable onPress={onClose} style={styles.closeButton}>
           <ThemedText style={styles.closeButtonText}>Close</ThemedText>
@@ -311,7 +311,7 @@ const styles = StyleSheet.create({
   },
   errorText: {
     marginTop: 16,
-    color: '#EF4444',
+    color: brandYellowDark,
     fontSize: 16,
     textAlign: 'center',
     paddingHorizontal: 20,

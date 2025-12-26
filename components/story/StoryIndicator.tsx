@@ -1,8 +1,9 @@
-import React from 'react';
+import React, { memo } from 'react';
 import { View, StyleSheet, Image, TouchableOpacity, Pressable } from 'react-native';
 import { StoryFeedItem } from '@/types';
 import { MaterialIcons } from '@expo/vector-icons';
 import { ThemedText } from '../themed-text';
+import { brandYellow } from '@/constants/theme';
 
 interface StoryIndicatorProps {
   item: StoryFeedItem;
@@ -10,7 +11,7 @@ interface StoryIndicatorProps {
   isOwnStory?: boolean;
 }
 
-export function StoryIndicator({ item, onPress, isOwnStory }: StoryIndicatorProps) {
+export const StoryIndicator = memo(function StoryIndicator({ item, onPress, isOwnStory }: StoryIndicatorProps) {
   const hasUnviewed = !item.allViewed && item.stories.length > 0;
 
   return (
@@ -25,7 +26,7 @@ export function StoryIndicator({ item, onPress, isOwnStory }: StoryIndicatorProp
         )}
         {isOwnStory && (
           <View style={styles.addIcon}>
-            <MaterialIcons name="add-circle" size={20} color="#007AFF" />
+            <MaterialIcons name="add-circle" size={20} color={brandYellow} />
           </View>
         )}
       </View>
@@ -34,7 +35,7 @@ export function StoryIndicator({ item, onPress, isOwnStory }: StoryIndicatorProp
       </ThemedText>
     </Pressable>
   );
-}
+});
 
 const styles = StyleSheet.create({
   container: {
@@ -53,7 +54,7 @@ const styles = StyleSheet.create({
   },
   avatarContainerUnviewed: {
     borderWidth: 2,
-    borderColor: '#007AFF',
+    borderColor: brandYellow,
   },
   avatar: {
     width: 64,

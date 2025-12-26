@@ -8,6 +8,8 @@ import { Platform } from 'react-native';
 // Demisand brand colors
 export const brandYellow = '#FFD700';
 export const brandYellowLight = '#FFF9E6';
+export const brandYellowDark = '#FFC107'; // Darker yellow for contrast
+export const brandYellowDarker = '#FFA000'; // Even darker for badges/errors
 export const brandDark = '#1A1A1A';
 
 const tintColorLight = brandYellow;

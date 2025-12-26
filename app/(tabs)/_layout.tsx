@@ -4,7 +4,7 @@ import { View, Text, StyleSheet } from 'react-native';
 
 import { HapticTab } from '@/components/haptic-tab';
 import { MaterialIcons } from '@expo/vector-icons';
-import { brandYellow } from '@/constants/theme';
+import { brandYellow, brandYellowDark } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useAuth } from '@/hooks/use-auth';
 import { useCart } from '@/hooks/use-cart';
@@ -106,7 +106,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: -6,
     right: -8,
-    backgroundColor: '#EF4444',
+    backgroundColor: brandYellowDark,
     borderRadius: 10,
     minWidth: 18,
     height: 18,

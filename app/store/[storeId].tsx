@@ -63,7 +63,19 @@ export default function StoreDetailScreen() {
           throw new Error('Store not found');
         }
       }
-      const p = await api.get<Product[]>(`/products?store=${storeId}`);
+      
+      // Load products and stats in parallel
+      const isOwner = user?.token && s.owner?.toString() === user.id;
+      const [p, storeStats] = await Promise.all([
+        api.get<Product[]>(`/products?store=${storeId}`),
+        isOwner 
+          ? api.get<{ productsSold: number; walletBalance: number; totalRevenue: number }>(
+              `/stores/${storeId}/stats`,
+              user.token
+            ).catch(() => null)
+          : Promise.resolve(null),
+      ]);
+      
       setStore(s);
       setProducts(p);
       setEditingStoreName(s.name);
@@ -73,17 +85,8 @@ export default function StoreDetailScreen() {
       setBankAccountNumber(s.bankDetails?.accountNumber || '');
       setBankName(s.bankDetails?.bankName || '');
       
-      // Load stats if owner
-      if (user?.token && s.owner?.toString() === user.id) {
-        try {
-          const storeStats = await api.get<{ productsSold: number; walletBalance: number; totalRevenue: number }>(
-            `/stores/${storeId}/stats`,
-            user.token
-          );
-          setStats(storeStats);
-        } catch (err) {
-          console.log('Stats not available');
-        }
+      if (storeStats) {
+        setStats(storeStats);
       }
     } catch (err: any) {
       Alert.alert('Store', err.message ?? 'Failed to load store');

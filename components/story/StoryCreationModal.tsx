@@ -17,6 +17,7 @@ import { ThemedText } from '../themed-text';
 import { ThemedView } from '../themed-view';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useAuth } from '@/hooks/use-auth';
+import { brandYellow } from '@/constants/theme';
 
 interface StoryCreationModalProps {
   visible: boolean;
@@ -171,11 +172,11 @@ export function StoryCreationModal({
         {!mediaUri ? (
           <View style={styles.pickerContainer}>
             <TouchableOpacity style={styles.pickerButton} onPress={takePhoto}>
-              <MaterialIcons name="camera-alt" size={48} color="#007AFF" />
+              <MaterialIcons name="camera-alt" size={48} color={brandYellow} />
               <ThemedText style={styles.pickerButtonText}>Take Photo</ThemedText>
             </TouchableOpacity>
             <TouchableOpacity style={styles.pickerButton} onPress={pickImage}>
-              <MaterialIcons name="photo-library" size={48} color="#007AFF" />
+              <MaterialIcons name="photo-library" size={48} color={brandYellow} />
               <ThemedText style={styles.pickerButtonText}>Choose from Library</ThemedText>
             </TouchableOpacity>
           </View>
@@ -230,7 +231,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   shareButton: {
-    backgroundColor: '#007AFF',
+    backgroundColor: brandYellow,
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 8,
@@ -254,7 +255,7 @@ const styles = StyleSheet.create({
   },
   pickerButtonText: {
     fontSize: 16,
-    color: '#007AFF',
+    color: brandYellow,
   },
   previewContainer: {
     flex: 1,

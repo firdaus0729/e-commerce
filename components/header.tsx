@@ -1,7 +1,7 @@
 import { Pressable, StyleSheet, View } from 'react-native';
 import { IconSymbol } from './ui/icon-symbol';
 import { DemisandLogo } from './logo';
-import { brandYellow } from '@/constants/theme';
+import { brandYellow, brandYellowDark } from '@/constants/theme';
 import { ThemedText } from './themed-text';
 import { useRouter } from 'expo-router';
 
@@ -19,6 +19,10 @@ interface HeaderProps {
     circular?: boolean;
   };
   onMenuPress?: () => void;
+  unreadMessageCount?: number;
+  unreadNotificationCount?: number;
+  onNotificationPress?: () => void;
+  onMessagesPress?: () => void;
 }
 
 export function Header({
@@ -30,6 +34,10 @@ export function Header({
   onBackPress,
   rightAction,
   onMenuPress,
+  unreadMessageCount = 0,
+  unreadNotificationCount = 0,
+  onNotificationPress,
+  onMessagesPress,
 }: HeaderProps) {
   const router = useRouter();
 
@@ -65,14 +73,30 @@ export function Header({
           </Pressable>
         )}
         {showNotifications && (
-          <Pressable style={styles.iconButton}>
+          <Pressable style={styles.iconButton} onPress={onNotificationPress}>
             <IconSymbol name="bell" size={15} color="#1A1A1A" />
-            <View style={styles.badge} />
+            {unreadNotificationCount > 0 && (
+              <View style={styles.badge}>
+                <ThemedText style={styles.badgeText}>
+                  {unreadNotificationCount > 99 ? '99+' : String(unreadNotificationCount)}
+                </ThemedText>
+              </View>
+            )}
           </Pressable>
         )}
         {showMessages && (
-          <Pressable style={[styles.iconButton, styles.messagesButton]}>
+          <Pressable 
+            style={[styles.iconButton, styles.messagesButton]}
+            onPress={onMessagesPress}
+          >
             <IconSymbol name="paperplane.fill" size={13} color="#FFFFFF" />
+            {unreadMessageCount > 0 && (
+              <View style={styles.badge}>
+                <ThemedText style={styles.badgeText}>
+                  {unreadMessageCount > 99 ? '99+' : String(unreadMessageCount)}
+                </ThemedText>
+              </View>
+            )}
           </Pressable>
         )}
         {rightAction && (
@@ -154,21 +178,30 @@ const styles = StyleSheet.create({
     borderColor: '#E5E5E5',
   },
   messagesButton: {
-    backgroundColor: '#6366F1',
-    borderColor: '#4F46E5',
+    backgroundColor: brandYellow,
+    borderColor: brandYellowDark,
     width: 30,
     height: 30,
   },
   badge: {
     position: 'absolute',
-    top: 4,
-    right: 4,
-    width: 8,
-    height: 8,
-    borderRadius: 5,
-    backgroundColor: '#EF4444',
+    top: -2,
+    right: -2,
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: brandYellowDark,
     borderWidth: 2,
     borderColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 4,
+  },
+  badgeText: {
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontWeight: '700',
+    lineHeight: 14,
   },
   actionButton: {
     flexDirection: 'row',

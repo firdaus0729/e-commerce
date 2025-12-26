@@ -2,7 +2,6 @@ import { useEffect, useState, useRef, useCallback } from "react";
 import {
   Alert,
   FlatList,
-  Image,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -15,6 +14,7 @@ import {
   ActivityIndicator,
   StatusBar,
 } from "react-native";
+import { Image } from "expo-image";
 import { useRouter, useFocusEffect } from "expo-router";
 import * as ImagePicker from "expo-image-picker";
 import * as DocumentPicker from "expo-document-picker";
@@ -32,10 +32,11 @@ import { CallInitiationModal } from "@/components/call-initiation-modal";
 import { StoryViewer } from "@/components/story/StoryViewer";
 import { StoryIndicator } from "@/components/story/StoryIndicator";
 import { StoryCreationModal } from "@/components/story/StoryCreationModal";
+import { ShareModal } from "@/components/share-modal";
 import { api } from "@/lib/api";
 import { Post, Message, PostComment, MessageType, StoryFeedItem } from "@/types";
 import { IconSymbol } from "@/components/ui/icon-symbol";
-import { brandYellow } from "@/constants/theme";
+import { brandYellow, brandYellowDark } from "@/constants/theme";
 import { useAuth } from "@/hooks/use-auth";
 import { MaterialIcons } from "@expo/vector-icons";
 
@@ -97,6 +98,12 @@ export default function FeedScreen() {
   const [showStoryViewer, setShowStoryViewer] = useState(false);
   const [showStoryCreation, setShowStoryCreation] = useState(false);
   const [selectedStoryUserIndex, setSelectedStoryUserIndex] = useState(0);
+  const [showShareModal, setShowShareModal] = useState(false);
+  const [selectedPostForShare, setSelectedPostForShare] = useState<Post | null>(null);
+  const [directMessageChats, setDirectMessageChats] = useState<PostChatUser[]>([]);
+  const [showDirectMessageChatList, setShowDirectMessageChatList] = useState(false);
+  const [totalUnreadCount, setTotalUnreadCount] = useState(0);
+  const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
 
   // Admin users are redirected to the dedicated admin page
   useEffect(() => {
@@ -121,44 +128,14 @@ export default function FeedScreen() {
         return true;
       });
       
-      // Check if user's stories are already in the feed
-      const userStoriesInFeed = uniqueStories.find(item => 
-        item.user._id.toString() === user.id.toString()
+      // Filter out MY stories from feed (only show other users' stories)
+      const filteredStories = uniqueStories.filter(item => 
+        item.user._id.toString() !== user.id.toString()
       );
       
-      // Only add user's stories if they're not already in the feed
-      if (!userStoriesInFeed) {
-        try {
-          const myStories = await api.get<any[]>("/stories/me", user.token);
-          if (myStories.length > 0) {
-            const myStoryItem: StoryFeedItem = {
-              user: {
-                _id: user.id,
-                name: user.name,
-                profilePhoto: user.profilePhoto,
-              },
-              stories: myStories,
-              allViewed: false,
-            };
-            uniqueStories.unshift(myStoryItem);
-          }
-        } catch (err) {
-          console.log("Failed to load own stories:", err);
-        }
-      } else {
-        // Move user's stories to the beginning if they exist in feed
-        const userIndex = uniqueStories.findIndex(item => 
-          item.user._id.toString() === user.id.toString()
-        );
-        if (userIndex > 0) {
-          const [userStories] = uniqueStories.splice(userIndex, 1);
-          uniqueStories.unshift(userStories);
-        }
-      }
-      
-      setStories(uniqueStories);
+      setStories(filteredStories);
     } catch (err) {
-      console.log("Failed to load stories:", err);
+      if (__DEV__) console.log("Failed to load stories:", err);
     }
   };
 
@@ -166,63 +143,95 @@ export default function FeedScreen() {
     if (!user?.token) return;
     setRefreshing(true);
     try {
-      const data = await api.get<Post[]>("/posts/feed", user.token);
+      // Load all data in parallel for better performance
+      const [data, saved, directChats, notificationCount, followersData, storiesData] = await Promise.all([
+        api.get<Post[]>("/posts/feed?page=1&limit=20", user.token),
+        api.get<Post[]>("/posts/saved", user.token).catch(() => []),
+        api.get<{ totalUnread: number; users: PostChatUser[] }>('/messages/direct/users', user.token).catch(() => ({ totalUnread: 0, users: [] })),
+        api.get<{ count: number }>('/notifications/count', user.token).catch(() => ({ count: 0 })),
+        api.get<{ _id: string; name: string; profilePhoto?: string }[]>("/users/me/followers", user.token).catch(() => []),
+        api.get<StoryFeedItem[]>("/stories/feed", user.token).catch(() => []),
+      ]);
+
       setPosts(data);
-      // Initialize saved state for posts from backend
-      try {
-        const saved = await api.get<Post[]>("/posts/saved", user.token);
-        const map: Record<string, boolean> = {};
-        saved.forEach((post) => {
-          map[post._id] = true;
-        });
-        setSavedPosts(map);
-      } catch (err) {
-        console.log("Failed to load saved posts:", err);
-      }
-      // Load unread counts for all posts
-      await loadUnreadCounts(data);
-      await loadFollowers();
-      await loadStories();
+      
+      // Initialize saved state
+      const map: Record<string, boolean> = {};
+      saved.forEach((post) => {
+        map[post._id] = true;
+      });
+      setSavedPosts(map);
+
+      // Set other data
+      setDirectMessageChats(directChats.users);
+      setTotalUnreadCount(directChats.totalUnread);
+      setUnreadNotificationCount(notificationCount.count);
+      setFollowers(followersData);
+      
+      // Filter stories (exclude current user's stories)
+      const seenUserIds = new Set<string>();
+      const uniqueStories = storiesData.filter((item) => {
+        const userId = item.user._id.toString();
+        if (seenUserIds.has(userId)) return false;
+        seenUserIds.add(userId);
+        return true;
+      });
+      const filteredStories = uniqueStories.filter(item => 
+        item.user._id.toString() !== user.id.toString()
+      );
+      setStories(filteredStories);
+
+      // Load unread counts in batch (non-blocking)
+      loadUnreadCountsBatch(data);
     } catch (err) {
-      console.log("Failed to load posts:", err);
+      if (__DEV__) console.log("Failed to load posts:", err);
     } finally {
       setRefreshing(false);
     }
   };
 
-  const loadUnreadCounts = async (postsData: Post[]) => {
-    if (!user?.token) return;
-    const counts: Record<string, number> = {};
-    for (const post of postsData) {
-      if (!post.user) continue;
-      const postUser = post.user as any;
-      const postOwnerId = postUser?._id?.toString() || postUser?.toString();
-      if (!postOwnerId) continue;
-      if (postOwnerId === user.id) {
-        // For post owner, get total unread chats for this post
-        try {
-          const result = await api.get<{ totalUnread: number }>(
-            `/messages/post/${post._id}/users`,
-            user.token
-          );
-          counts[post._id] = result.totalUnread;
-        } catch (err) {
-          console.log("Failed to load unread count for post:", err);
-        }
-      } else {
-        // For regular user, get unread messages from post owner for this post
-        try {
-          const result = await api.get<{ unreadCount: number }>(
-            `/messages/unread/${post._id}/${postOwnerId}`,
-            user.token
-          );
-          counts[post._id] = result.unreadCount;
-        } catch (err) {
-          console.log("Failed to load unread count:", err);
-        }
-      }
+  const loadUnreadCountsBatch = async (postsData: Post[]) => {
+    if (!user?.token || postsData.length === 0) return;
+    try {
+      const postIds = postsData.map(p => p._id);
+      const counts = await api.post<Record<string, number>>(
+        '/messages/batch/unread-counts',
+        { postIds },
+        user.token
+      );
+      setUnreadCounts(counts);
+    } catch (err) {
+      if (__DEV__) console.log("Failed to load unread counts:", err);
     }
-    setUnreadCounts(counts);
+  };
+
+  // Legacy function for single post (kept for compatibility)
+  const loadUnreadCounts = async (postsData: Post[]) => {
+    await loadUnreadCountsBatch(postsData);
+  };
+
+  const loadDirectMessageChats = async () => {
+    if (!user?.token) return;
+    try {
+      const result = await api.get<{ totalUnread: number; users: PostChatUser[] }>(
+        '/messages/direct/users',
+        user.token
+      );
+      setDirectMessageChats(result.users);
+      setTotalUnreadCount(result.totalUnread);
+    } catch (err) {
+      if (__DEV__) console.log("Failed to load direct message chats:", err);
+    }
+  };
+
+  const loadNotificationCount = async () => {
+    if (!user?.token) return;
+    try {
+      const result = await api.get<{ count: number }>('/notifications/count', user.token);
+      setUnreadNotificationCount(result.count);
+    } catch (err) {
+      if (__DEV__) console.log("Failed to load notification count:", err);
+    }
   };
 
   useEffect(() => {
@@ -231,24 +240,30 @@ export default function FeedScreen() {
     }
   }, [user?.token, authLoading]);
 
-  // Refresh unread counts when page is focused
+  // Refresh unread counts when page is focused (non-blocking)
   useFocusEffect(
     useCallback(() => {
       if (user?.token && posts.length > 0) {
-        loadUnreadCounts(posts);
+        // Load in parallel, don't block UI
+        Promise.all([
+          loadUnreadCountsBatch(posts),
+          loadDirectMessageChats(),
+          loadNotificationCount(),
+        ]).catch(() => {});
       }
+      // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [user?.token, posts.length])
   );
 
   // Track view when post is displayed
-  const trackView = async (postId: string) => {
+  const trackView = useCallback(async (postId: string) => {
     if (!user?.token) return;
     try {
       await api.post(`/posts/${postId}/view`, {}, user.token);
     } catch (err) {
-      console.log("Failed to track view:", err);
+      if (__DEV__) console.log("Failed to track view:", err);
     }
-  };
+  }, [user?.token]);
 
   const loadFollowers = async () => {
     if (!user?.token) return;
@@ -258,7 +273,7 @@ export default function FeedScreen() {
       >("/users/me/followers", user.token);
       setFollowers(followersData);
     } catch (err) {
-      console.log("Failed to load followers:", err);
+      if (__DEV__) console.log("Failed to load followers:", err);
     }
   };
 
@@ -272,7 +287,16 @@ export default function FeedScreen() {
           style={styles.followersFlowScroll}
         >
           {followers.map((follower) => (
-            <Pressable key={follower._id} style={styles.followersFlowItem}>
+            <Pressable 
+              key={follower._id} 
+              style={styles.followersFlowItem}
+              onPress={() => {
+                router.push({
+                  pathname: '/(tabs)/profile',
+                  params: { userId: follower._id },
+                });
+              }}
+            >
               <View style={styles.followersFlowAvatar}>
                 {follower.profilePhoto ? (
                   <Image
@@ -297,7 +321,7 @@ export default function FeedScreen() {
     );
   };
 
-  const renderStories = () => {
+  const renderStories = useCallback(() => {
     if (stories.length === 0 && !user?.token) return null;
 
     return (
@@ -312,7 +336,7 @@ export default function FeedScreen() {
           contentContainerStyle={styles.storiesScrollContent}
         >
           {/* Create story button (own story) */}
-          {user?.token && (
+          {/* {user?.token && (
             <Pressable
               onPress={() => setShowStoryCreation(true)}
               style={styles.storyIndicatorWrapper}
@@ -326,7 +350,7 @@ export default function FeedScreen() {
                 Your Story
               </ThemedText>
             </Pressable>
-          )}
+          )} */}
           {/* Story indicators */}
           {stories.map((storyItem, index) => {
             // Use a unique key that includes both user ID and index to prevent duplicates
@@ -354,7 +378,7 @@ export default function FeedScreen() {
         </ScrollView>
       </View>
     );
-  };
+  }, [stories, user?.token, user?.id]);
 
   const formatTimeAgo = (dateString: string): string => {
     const date = new Date(dateString);
@@ -380,11 +404,11 @@ export default function FeedScreen() {
     return `${Math.floor(diffInSeconds / 86400)}d ago`;
   };
 
-  const openComments = async (post: Post) => {
+  const openComments = useCallback(async (post: Post) => {
     setSelectedPost(post);
     setShowCommentModal(true);
     await loadComments(post._id);
-  };
+  }, []);
 
   const loadComments = async (postId: string) => {
     setLoadingComments(true);
@@ -418,7 +442,7 @@ export default function FeedScreen() {
     }
   };
 
-  const openChat = async (post: Post) => {
+  const openChat = useCallback(async (post: Post) => {
     if (!user?.token) {
       Alert.alert("Login required", "Please log in to chat");
       return;
@@ -453,7 +477,8 @@ export default function FeedScreen() {
       setShowChatModal(true);
       await loadMessages(post._id, postOwnerId);
     }
-  };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user]);
 
   const loadPostOwnerChats = async (postId: string) => {
     if (!user?.token) return;
@@ -479,6 +504,38 @@ export default function FeedScreen() {
     setShowPostOwnerChatList(false);
     setShowChatModal(true);
     await loadMessages(selectedPost._id, chatUser._id);
+  };
+
+  const openDirectMessageChat = async (chatUser: {
+    _id: string;
+    name: string;
+    profilePhoto?: string;
+  }) => {
+    setSelectedChatUser(chatUser);
+    setSelectedPostOwner(null);
+    setSelectedPost(null);
+    setShowDirectMessageChatList(false);
+    setShowChatModal(true);
+    setIsPostOwnerChatMode(false);
+    await loadDirectMessages(chatUser._id);
+  };
+
+  const loadDirectMessages = async (userId: string) => {
+    if (!user?.token) return;
+    setLoadingMessages(true);
+    try {
+      const data = await api.get<Message[]>(
+        `/messages/direct/${userId}`,
+        user.token
+      );
+      setMessages(data);
+      // Refresh direct message chats
+      await loadDirectMessageChats();
+    } catch (err: any) {
+      Alert.alert("Error", err.message || "Failed to load messages");
+    } finally {
+      setLoadingMessages(false);
+    }
   };
 
   const loadMessages = async (postId: string, userId: string) => {
@@ -507,7 +564,7 @@ export default function FeedScreen() {
     duration?: number,
     text?: string
   ) => {
-    if (!user?.token || !selectedPost) return;
+    if (!user?.token) return;
     const receiverId = selectedPostOwner?._id || selectedChatUser?._id;
     if (!receiverId) return;
     const messageContent = text || messageText.trim();
@@ -519,7 +576,7 @@ export default function FeedScreen() {
         "/messages",
         {
           receiverId,
-          postId: selectedPost._id,
+          postId: selectedPost?._id, // Can be null for direct messages
           type,
           text: type === "text" ? messageContent : messageContent || "",
           mediaUrl,
@@ -534,11 +591,14 @@ export default function FeedScreen() {
       // Refresh unread counts after sending message
       if (selectedPost) {
         await loadUnreadCounts([selectedPost]);
+        if (showPostOwnerChatList) {
+          await loadPostOwnerChats(selectedPost._id);
+        }
+      } else {
+        // Direct message - refresh direct message chats
+        await loadDirectMessageChats();
       }
       load();
-      if (showPostOwnerChatList) {
-        await loadPostOwnerChats(selectedPost._id);
-      }
     } catch (err: any) {
       Alert.alert("Error", err.message || "Failed to send message");
     } finally {
@@ -801,10 +861,13 @@ export default function FeedScreen() {
   };
 
   const openCallInitiation = () => {
-    if (!selectedPost) return;
+    // Allow calls for both post-based and direct messaging
     const receiverId = selectedPostOwner?._id || selectedChatUser?._id;
     const receiverName = selectedPostOwner?.name || selectedChatUser?.name;
-    if (!receiverId || !receiverName) return;
+    if (!receiverId || !receiverName) {
+      Alert.alert('Error', 'User information is missing');
+      return;
+    }
     setShowCallInitiation(true);
   };
 
@@ -818,7 +881,7 @@ export default function FeedScreen() {
     setShowAudioCall(true);
   };
 
-  const renderPost = ({ item }: { item: Post }) => {
+  const renderPost = useCallback(({ item }: { item: Post }) => {
     if (!item.user) {
       // Skip rendering posts with null/undefined user
       return null;
@@ -840,9 +903,26 @@ export default function FeedScreen() {
     return (
       <View style={styles.postCard}>
         <View style={styles.postHeader}>
-          <View style={styles.postUser}>
+          <Pressable 
+            style={styles.postUser}
+            onPress={() => {
+              if (!isPostOwner && postOwnerId) {
+                router.push({
+                  pathname: '/(tabs)/profile',
+                  params: { userId: postOwnerId },
+                });
+              } else if (isPostOwner) {
+                router.push('/(tabs)/profile');
+              }
+            }}
+          >
             {userPhoto ? (
-              <Image source={{ uri: userPhoto }} style={styles.postAvatar} />
+              <Image 
+                source={{ uri: userPhoto }} 
+                style={styles.postAvatar}
+                contentFit="cover"
+                cachePolicy="memory-disk"
+              />
             ) : (
               <View style={styles.postAvatar} />
             )}
@@ -854,7 +934,7 @@ export default function FeedScreen() {
                 {formatTimeAgo(item.createdAt)}
               </ThemedText>
             </View>
-          </View>
+          </Pressable>
           <Pressable
             style={[
               styles.postSaveTopButton,
@@ -887,6 +967,9 @@ export default function FeedScreen() {
           <Image
             source={{ uri: item.images[0] }}
             style={styles.postImage}
+            contentFit="cover"
+            transition={200}
+            cachePolicy="memory-disk"
             onLoad={() => trackView(item._id)}
           />
         ) : (
@@ -919,7 +1002,7 @@ export default function FeedScreen() {
             <IconSymbol
               name={isLiked ? "heart.fill" : "heart"}
               size={20}
-              color={isLiked ? "#EF4444" : isPostOwner ? "#ccc" : "#666"}
+              color={isLiked ? brandYellowDark : isPostOwner ? "#ccc" : "#666"}
             />
             <ThemedText
               style={[
@@ -961,13 +1044,36 @@ export default function FeedScreen() {
               )}
             </View>
           </Pressable>
+          <Pressable
+            style={styles.engagementItem}
+            onPress={() => {
+              setSelectedPostForShare(item);
+              setShowShareModal(true);
+            }}
+          >
+            <MaterialIcons name="share" size={22} color={brandYellow} />
+            <ThemedText style={styles.engagementText}>Share</ThemedText>
+          </Pressable>
         </View>
 
         {item.caption && (
           <ThemedText style={styles.postCaption}>
-            <ThemedText style={styles.postCaptionBold}>
-              {isPostOwner ? "Me" : userName}{" "}
-            </ThemedText>
+            <Pressable
+              onPress={() => {
+                if (!isPostOwner && postOwnerId) {
+                  router.push({
+                    pathname: '/(tabs)/profile',
+                    params: { userId: postOwnerId },
+                  });
+                } else if (isPostOwner) {
+                  router.push('/(tabs)/profile');
+                }
+              }}
+            >
+              <ThemedText style={styles.postCaptionBold}>
+                {isPostOwner ? "Me" : userName}{" "}
+              </ThemedText>
+            </Pressable>
             {item.caption}
           </ThemedText>
         )}
@@ -978,11 +1084,24 @@ export default function FeedScreen() {
         )}
       </View>
     );
-  };
+  }, [user, unreadCounts, savedPosts, formatTimeAgo, trackView, openComments, openChat, load]);
 
   return (
     <ThemedView style={styles.container}>
-      <Header showSearch showNotifications showMessages />
+      <Header 
+        showSearch 
+        showNotifications 
+        showMessages 
+        unreadMessageCount={totalUnreadCount}
+        unreadNotificationCount={unreadNotificationCount}
+        onNotificationPress={() => {
+          router.push('/notifications');
+        }}
+        onMessagesPress={() => {
+          setShowDirectMessageChatList(true);
+          loadDirectMessageChats();
+        }}
+      />
       <FlatList
         ListHeaderComponent={<View>{renderStories()}</View>}
         data={posts}
@@ -993,6 +1112,11 @@ export default function FeedScreen() {
         }
         contentContainerStyle={styles.list}
         showsVerticalScrollIndicator={false}
+        removeClippedSubviews={true}
+        maxToRenderPerBatch={10}
+        updateCellsBatchingPeriod={50}
+        initialNumToRender={10}
+        windowSize={10}
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
             <ThemedText style={styles.emptyText}>No posts yet</ThemedText>
@@ -1063,21 +1187,49 @@ export default function FeedScreen() {
                 const postDate = selectedPost
                   ? new Date(selectedPost.createdAt)
                   : commentDate;
+                const commentUserId = commentUser?._id?.toString() || commentUser?.toString();
+                const isCommentOwner = user?.id === commentUserId;
                 return (
                   <View key={comment._id} style={styles.commentItem}>
-                    {commentUser?.profilePhoto ? (
-                      <Image
-                        source={{ uri: commentUser.profilePhoto }}
-                        style={styles.commentAvatar}
-                      />
-                    ) : (
-                      <View style={styles.commentAvatar} />
-                    )}
+                    <Pressable
+                      onPress={() => {
+                        if (commentUserId && !isCommentOwner) {
+                          router.push({
+                            pathname: '/(tabs)/profile',
+                            params: { userId: commentUserId },
+                          });
+                        } else if (isCommentOwner) {
+                          router.push('/(tabs)/profile');
+                        }
+                      }}
+                    >
+                      {commentUser?.profilePhoto ? (
+                        <Image
+                          source={{ uri: commentUser.profilePhoto }}
+                          style={styles.commentAvatar}
+                        />
+                      ) : (
+                        <View style={styles.commentAvatar} />
+                      )}
+                    </Pressable>
                     <View style={styles.commentContent}>
                       <View style={styles.commentHeader}>
-                        <ThemedText style={styles.commentName}>
-                          {commentUser?.name || "Unknown"}
-                        </ThemedText>
+                        <Pressable
+                          onPress={() => {
+                            if (commentUserId && !isCommentOwner) {
+                              router.push({
+                                pathname: '/(tabs)/profile',
+                                params: { userId: commentUserId },
+                              });
+                            } else if (isCommentOwner) {
+                              router.push('/(tabs)/profile');
+                            }
+                          }}
+                        >
+                          <ThemedText style={styles.commentName}>
+                            {commentUser?.name || "Unknown"}
+                          </ThemedText>
+                        </Pressable>
                         <ThemedText style={styles.commentTime}>
                           {formatTimeSinceView(commentDate, postDate)}
                         </ThemedText>
@@ -1173,6 +1325,96 @@ export default function FeedScreen() {
                     <Image
                       source={{ uri: chatUser.user.profilePhoto }}
                       style={styles.chatListAvatar}
+                      contentFit="cover"
+                      cachePolicy="memory-disk"
+                    />
+                  ) : (
+                    <View style={styles.chatListAvatar} />
+                  )}
+                  <View style={styles.chatListItemContent}>
+                    <View style={styles.chatListItemHeader}>
+                      <ThemedText style={styles.chatListItemName}>
+                        {chatUser.user.name}
+                      </ThemedText>
+                      {chatUser.lastMessage && (
+                        <ThemedText style={styles.chatListItemTime}>
+                          {new Date(
+                            chatUser.lastMessage.createdAt
+                          ).toLocaleTimeString([], {
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })}
+                        </ThemedText>
+                      )}
+                    </View>
+                    {chatUser.lastMessage && (
+                      <ThemedText
+                        style={styles.chatListItemPreview}
+                        numberOfLines={1}
+                      >
+                        {chatUser.lastMessage.text}
+                      </ThemedText>
+                    )}
+                  </View>
+                  {chatUser.unreadCount > 0 && (
+                    <View style={styles.chatListUnreadBadge}>
+                      <ThemedText style={styles.chatListUnreadBadgeText}>
+                        {chatUser.unreadCount > 99
+                          ? "99+"
+                          : String(chatUser.unreadCount)}
+                      </ThemedText>
+                    </View>
+                  )}
+                </Pressable>
+              ))
+            )}
+          </ScrollView>
+        </View>
+      </Modal>
+
+      {/* Direct Message Chat List Modal */}
+      <Modal
+        visible={showDirectMessageChatList}
+        animationType="slide"
+        transparent={false}
+        presentationStyle="fullScreen"
+        onRequestClose={() => {
+          setShowDirectMessageChatList(false);
+        }}
+      >
+        <View style={styles.chatListContainer}>
+          <View style={styles.chatListHeader}>
+            <Pressable
+              onPress={() => {
+                setShowDirectMessageChatList(false);
+              }}
+            >
+              <IconSymbol name="chevron.left" size={24} color="#1A1A1A" />
+            </Pressable>
+            <ThemedText style={styles.chatListTitle}>Chats</ThemedText>
+            <View style={{ width: 24 }} />
+          </View>
+
+          <ScrollView style={styles.chatListScroll}>
+            {directMessageChats.length === 0 ? (
+              <View style={styles.emptyChatList}>
+                <ThemedText style={styles.emptyChatListText}>
+                  No chats yet
+                </ThemedText>
+              </View>
+            ) : (
+              directMessageChats.map((chatUser) => (
+                <Pressable
+                  key={chatUser.user._id}
+                  style={styles.chatListItem}
+                  onPress={() => openDirectMessageChat(chatUser.user)}
+                >
+                  {chatUser.user.profilePhoto ? (
+                    <Image
+                      source={{ uri: chatUser.user.profilePhoto }}
+                      style={styles.chatListAvatar}
+                      contentFit="cover"
+                      cachePolicy="memory-disk"
                     />
                   ) : (
                     <View style={styles.chatListAvatar} />
@@ -1230,6 +1472,11 @@ export default function FeedScreen() {
             setShowChatModal(false);
             setShowPostOwnerChatList(true);
             setSelectedChatUser(null);
+          } else if (!selectedPost && selectedChatUser) {
+            // Direct message - go back to direct message chat list
+            setShowChatModal(false);
+            setShowDirectMessageChatList(true);
+            setSelectedChatUser(null);
           } else {
             setShowChatModal(false);
             setSelectedPostOwner(null);
@@ -1249,6 +1496,11 @@ export default function FeedScreen() {
                   // Post owner - go back to chat list
                   setShowChatModal(false);
                   setShowPostOwnerChatList(true);
+                  setSelectedChatUser(null);
+                } else if (!selectedPost && selectedChatUser) {
+                  // Direct message - go back to direct message chat list
+                  setShowChatModal(false);
+                  setShowDirectMessageChatList(true);
                   setSelectedChatUser(null);
                 } else {
                   // Regular user or closing - close chat
@@ -1535,7 +1787,7 @@ export default function FeedScreen() {
                 onPress={cancelRecording}
                 style={styles.recordingCancelButton}
               >
-                <MaterialIcons name="close" size={24} color="#EF4444" />
+                <MaterialIcons name="close" size={24} color={brandYellowDark} />
               </Pressable>
               <View style={styles.recordingIndicator}>
                 <View style={styles.recordingDot} />
@@ -1621,7 +1873,7 @@ export default function FeedScreen() {
       </Modal>
 
       {/* Call Initiation Modal */}
-      {selectedPost && (selectedPostOwner || selectedChatUser) && (
+      {(selectedPostOwner || selectedChatUser) && (
         <CallInitiationModal
           visible={showCallInitiation}
           onClose={() => setShowCallInitiation(false)}
@@ -1635,7 +1887,7 @@ export default function FeedScreen() {
       )}
 
       {/* Audio Call Modal */}
-      {selectedPost && (selectedPostOwner || selectedChatUser) && (
+      {(selectedPostOwner || selectedChatUser) && (
         <AudioCall
           visible={showAudioCall}
           onClose={() => setShowAudioCall(false)}
@@ -1643,12 +1895,12 @@ export default function FeedScreen() {
           otherUserName={
             selectedPostOwner?.name || selectedChatUser?.name || "User"
           }
-          postId={selectedPost._id}
+          postId={selectedPost?._id}
         />
       )}
 
       {/* Video Call Modal */}
-      {selectedPost && (selectedPostOwner || selectedChatUser) && (
+      {(selectedPostOwner || selectedChatUser) && (
         <VideoCall
           visible={showVideoCall}
           onClose={() => setShowVideoCall(false)}
@@ -1656,7 +1908,7 @@ export default function FeedScreen() {
           otherUserName={
             selectedPostOwner?.name || selectedChatUser?.name || "User"
           }
-          postId={selectedPost._id}
+          postId={selectedPost?._id}
         />
       )}
 
@@ -1677,6 +1929,22 @@ export default function FeedScreen() {
         onClose={() => setShowStoryCreation(false)}
         onStoryCreated={() => {
           loadStories(); // Refresh stories after creation
+        }}
+      />
+
+      {/* Share Modal */}
+      <ShareModal
+        visible={showShareModal}
+        onClose={() => {
+          setShowShareModal(false);
+          setSelectedPostForShare(null);
+        }}
+        postId={selectedPostForShare?._id}
+        postImageUrl={selectedPostForShare?.images?.[0]}
+        postCaption={selectedPostForShare?.caption}
+        onAddToStory={() => {
+          // Navigate to story creation with post image
+          setShowStoryCreation(true);
         }}
       />
     </ThemedView>
@@ -1834,7 +2102,7 @@ const styles = StyleSheet.create({
     fontWeight: "500",
   },
   postSaveTopTextSaved: {
-    color: "#EF4444",
+    color: brandYellowDark,
     fontWeight: "700",
   },
   postSaveTopTextDisabled: {
@@ -1842,14 +2110,13 @@ const styles = StyleSheet.create({
   },
   postEngagement: {
     flexDirection: "row",
-    gap: 20,
     padding: 12,
     alignItems: "center",
+    justifyContent: "space-between"
   },
   engagementItem: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
   },
   engagementItemDisabled: {
     opacity: 0.5,
@@ -1867,7 +2134,7 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   unreadBadge: {
-    backgroundColor: "#EF4444",
+    backgroundColor: brandYellowDark,
     borderRadius: 10,
     minWidth: 20,
     height: 20,
@@ -2087,7 +2354,7 @@ const styles = StyleSheet.create({
     color: "#666",
   },
   chatListUnreadBadge: {
-    backgroundColor: "#EF4444",
+    backgroundColor: brandYellowDark,
     borderRadius: 12,
     minWidth: 24,
     height: 24,
@@ -2315,7 +2582,7 @@ const styles = StyleSheet.create({
     width: 12,
     height: 12,
     borderRadius: 6,
-    backgroundColor: "#EF4444",
+    backgroundColor: brandYellowDark,
   },
   recordingText: {
     fontSize: 16,
@@ -2326,7 +2593,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: "#EF4444",
+    backgroundColor: brandYellowDark,
     alignItems: "center",
     justifyContent: "center",
   },

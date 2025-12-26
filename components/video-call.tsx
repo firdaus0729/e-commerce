@@ -4,7 +4,7 @@ import { ThemedText } from './themed-text';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useAuth } from '@/hooks/use-auth';
 import { api } from '@/lib/api';
-import { brandYellow } from '@/constants/theme';
+import { brandYellow, brandYellowDark } from '@/constants/theme';
 import { API_URL } from '@/constants/config';
 
 interface VideoCallProps {
@@ -12,7 +12,7 @@ interface VideoCallProps {
   onClose: () => void;
   otherUserId: string;
   otherUserName: string;
-  postId: string;
+  postId?: string; // Optional for direct calls
 }
 
 export function VideoCall({ visible, onClose, otherUserId, otherUserName, postId }: VideoCallProps) {
@@ -126,7 +126,9 @@ export function VideoCall({ visible, onClose, otherUserId, otherUserName, postId
       socketRef.current = socket;
 
       socket.on('connect', () => {
-        socket.emit('join', { postId });
+        if (postId) {
+          socket.emit('join', { postId });
+        }
         setTimeout(() => createOffer(), 100);
       });
 
@@ -169,7 +171,7 @@ export function VideoCall({ visible, onClose, otherUserId, otherUserName, postId
       await peerConnectionRef.current.setLocalDescription(offer);
 
       if (socketRef.current && user?.id) {
-        socketRef.current.emit('call-user', { to: otherUserId, offer, postId });
+        socketRef.current.emit('call-user', { to: otherUserId, offer, postId: postId || 'direct' });
       }
     } catch (err: any) {
       Alert.alert('Error', 'Failed to create offer');
@@ -424,10 +426,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   controlButtonActive: {
-    backgroundColor: '#EF4444',
+    backgroundColor: brandYellowDark,
   },
   endCallButton: {
-    backgroundColor: '#EF4444',
+    backgroundColor: brandYellowDark,
   },
 });
 

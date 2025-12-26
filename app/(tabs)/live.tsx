@@ -10,7 +10,7 @@ import { Stream } from '@/types';
 import { useAuth } from '@/hooks/use-auth';
 import { useRouter } from 'expo-router';
 import { MaterialIcons } from '@expo/vector-icons';
-import { brandYellow } from '@/constants/theme';
+import { brandYellow, brandYellowDark } from '@/constants/theme';
 
 // Define styles first so they're available for fallback components
 const styles = StyleSheet.create({
@@ -68,7 +68,7 @@ try {
   LiveStreamViewer = ({ stream, onClose }: any) => (
     <ThemedView style={styles.container}>
       <View style={styles.errorContainer}>
-        <MaterialIcons name="error-outline" size={48} color="#EF4444" />
+        <MaterialIcons name="error-outline" size={48} color={brandYellowDark} />
         <ThemedText style={styles.errorText}>WebRTC Module Not Available</ThemedText>
         <ThemedText style={styles.errorSubtext}>
           react-native-webrtc requires a development build.{'\n'}
@@ -84,7 +84,7 @@ try {
   LiveStreamBroadcaster = ({ stream, onStop }: any) => (
     <ThemedView style={styles.container}>
       <View style={styles.errorContainer}>
-        <MaterialIcons name="error-outline" size={48} color="#EF4444" />
+        <MaterialIcons name="error-outline" size={48} color={brandYellowDark} />
         <ThemedText style={styles.errorText}>WebRTC Module Not Available</ThemedText>
         <ThemedText style={styles.errorSubtext}>
           react-native-webrtc requires a development build.{'\n'}

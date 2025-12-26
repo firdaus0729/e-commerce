@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { Alert, Image, Pressable, ScrollView, StyleSheet, View, Modal, TextInput, ActivityIndicator, KeyboardAvoidingView, Platform, StatusBar } from 'react-native';
-import { useRouter, useFocusEffect } from 'expo-router';
+import { useRouter, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
 import { Audio } from 'expo-av';
@@ -9,11 +9,14 @@ import { ThemedView } from '@/components/themed-view';
 import { Header } from '@/components/header';
 import { useAuth } from '@/hooks/use-auth';
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import { brandYellow } from '@/constants/theme';
+import { brandYellow, brandYellowDark } from '@/constants/theme';
 import { api } from '@/lib/api';
-import { Post, Stream, UserStats, Message, MessageType } from '@/types';
+import { Post, Stream, UserStats, Message, MessageType, StoryFeedItem } from '@/types';
+import { StoryIndicator } from '@/components/story/StoryIndicator';
+import { StoryViewer } from '@/components/story/StoryViewer';
+import { StoryCreationModal } from '@/components/story/StoryCreationModal';
 import { API_URL } from '@/constants/config';
-import { Video } from 'expo-av';
+import { Video, ResizeMode } from 'expo-av';
 import { ChatMenu } from '@/components/chat-menu';
 import { EmojiPicker } from '@/components/emoji-picker';
 import { GifPicker } from '@/components/gif-picker';
@@ -23,7 +26,9 @@ type TabType = 'posts' | 'saved';
 
 export default function ProfileScreen() {
   const router = useRouter();
+  const { userId } = useLocalSearchParams<{ userId?: string }>();
   const { user, logout, updateUser, loading: authLoading } = useAuth();
+  const [profileUser, setProfileUser] = useState<{ _id: string; name: string; email: string; profilePhoto?: string; bio?: string } | null>(null);
   const [activeTab, setActiveTab] = useState<TabType>('posts');
   const [stats, setStats] = useState<UserStats>({ postsCount: 0, followersCount: 0, followingCount: 0 });
   const [posts, setPosts] = useState<Post[]>([]);
@@ -36,7 +41,12 @@ export default function ProfileScreen() {
   const [postCaption, setPostCaption] = useState('');
   const [uploadingPost, setUploadingPost] = useState(false);
   const [localProfilePhoto, setLocalProfilePhoto] = useState<string | undefined>(user?.profilePhoto);
-  const [suggestedUsers, setSuggestedUsers] = useState<{ _id: string; name: string; profilePhoto?: string }[]>([]);
+  const [profileFollowing, setProfileFollowing] = useState<boolean>(false);
+  const [updatingFollow, setUpdatingFollow] = useState(false);
+  const [myStories, setMyStories] = useState<StoryFeedItem[]>([]);
+  const [showStoryViewer, setShowStoryViewer] = useState(false);
+  const [showStoryCreation, setShowStoryCreation] = useState(false);
+  const [selectedStoryUserIndex, setSelectedStoryUserIndex] = useState(0);
   const [unreadMessageCounts, setUnreadMessageCounts] = useState<Record<string, number>>({});
   const [loadingUsers, setLoadingUsers] = useState(false);
   const [showImageModal, setShowImageModal] = useState(false);
@@ -65,18 +75,24 @@ export default function ProfileScreen() {
 
   useEffect(() => {
     if (!authLoading && user?.token) {
-      loadData();
+      if (userId && userId !== user.id) {
+        // Loading another user's profile
+        loadOtherUserProfile();
+      } else {
+        // Loading own profile
+        loadData();
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.token, authLoading]);
+  }, [user?.token, authLoading, userId]);
 
-  // Refresh unread message counts when page is focused
+  // Refresh stories when page is focused
   useFocusEffect(
     useCallback(() => {
-      if (user?.token && suggestedUsers.length > 0) {
-        loadUnreadMessageCounts(suggestedUsers);
+      if (user?.token) {
+        loadMyStories();
       }
-    }, [user?.token, suggestedUsers.length])
+    }, [user?.token])
   );
 
   useEffect(() => {
@@ -123,41 +139,120 @@ export default function ProfileScreen() {
     }
   };
 
-  const loadData = async () => {
-    if (!user?.token) return;
+  const loadOtherUserProfile = async () => {
+    if (!user?.token || !userId) return;
     setLoading(true);
     try {
-      const [statsData, postsData, savedPostsData, savedStreamsData] = await Promise.all([
-        api.get<UserStats>('/users/me/stats', user.token),
-        api.get<Post[]>('/posts/me', user.token),
-        api.get<Post[]>('/posts/saved', user.token),
-        api.get<Stream[]>('/streams/saved', user.token),
+      // Load all data in parallel
+      const [userData, postsData, followStatus, myStoriesData] = await Promise.all([
+        api.get<{ _id: string; name: string; email: string; profilePhoto?: string; bio?: string; postsCount: number; followersCount: number; followingCount: number }>(`/users/${userId}`, user.token),
+        api.get<Post[]>(`/posts/user/${userId}`, user.token),
+        userId && userId !== user.id 
+          ? api.get<{ following: boolean }>(`/users/${userId}/follow-status`, user.token).catch(() => ({ following: false }))
+          : Promise.resolve({ following: false }),
+        api.get<any[]>('/stories/me', user.token).catch(() => []),
       ]);
-      setStats(statsData);
+      
+      setProfileUser(userData);
+      setStats({
+        postsCount: userData.postsCount,
+        followersCount: userData.followersCount,
+        followingCount: userData.followingCount,
+      });
       setPosts(postsData);
-      setSavedPosts(savedPostsData);
-      setSavedStreams(savedStreamsData);
-      loadSuggestedUsers();
+      setSavedPosts([]);
+      setSavedStreams([]);
+      
+      // Set follow status
+      if (userId && userId !== user.id) {
+        setIsFollowing(followStatus.following);
+      }
+      
+      // Set my stories
+      if (myStoriesData.length > 0) {
+        const myStoryItem: StoryFeedItem = {
+          user: {
+            _id: user.id,
+            name: user.name,
+            profilePhoto: user.profilePhoto,
+          },
+          stories: myStoriesData,
+          allViewed: false,
+        };
+        setMyStories([myStoryItem]);
+      } else {
+        setMyStories([]);
+      }
     } catch (err: any) {
-      console.error('Failed to load profile data:', err);
+      if (__DEV__) console.log('Failed to load other user profile:', err);
     } finally {
       setLoading(false);
     }
   };
 
-  const loadSuggestedUsers = async () => {
+  const loadData = async () => {
+    if (!user?.token) return;
+    setLoading(true);
+    try {
+      // Load all data in parallel including stories
+      const [statsData, postsData, savedPostsData, savedStreamsData, myStoriesData] = await Promise.all([
+        api.get<UserStats>('/users/me/stats', user.token),
+        api.get<Post[]>('/posts/me', user.token),
+        api.get<Post[]>('/posts/saved', user.token),
+        api.get<Stream[]>('/streams/saved', user.token),
+        api.get<any[]>('/stories/me', user.token).catch(() => []),
+      ]);
+      setStats(statsData);
+      setPosts(postsData);
+      setSavedPosts(savedPostsData);
+      setSavedStreams(savedStreamsData);
+      setProfileUser(null); // Clear other user data
+      
+      // Set my stories
+      if (myStoriesData.length > 0) {
+        const myStoryItem: StoryFeedItem = {
+          user: {
+            _id: user.id,
+            name: user.name,
+            profilePhoto: user.profilePhoto,
+          },
+          stories: myStoriesData,
+          allViewed: false,
+        };
+        setMyStories([myStoryItem]);
+      } else {
+        setMyStories([]);
+      }
+    } catch (err: any) {
+      if (__DEV__) console.log('Failed to load profile data:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadMyStories = async () => {
     if (!user?.token) return;
     setLoadingUsers(true);
     try {
-      // Get users who messaged current user or liked their stories
-      const users = await api.get<{ _id: string; name: string; profilePhoto?: string }[]>('/users/me/interactions?limit=20', user.token);
-      setSuggestedUsers(users);
-      // Load unread message counts for each user
-      await loadUnreadMessageCounts(users);
+      // Get only MY stories
+      const stories = await api.get<any[]>('/stories/me', user.token);
+      if (stories.length > 0) {
+        const myStoryItem: StoryFeedItem = {
+          user: {
+            _id: user.id,
+            name: user.name,
+            profilePhoto: user.profilePhoto,
+          },
+          stories: stories,
+          allViewed: false,
+        };
+        setMyStories([myStoryItem]);
+      } else {
+        setMyStories([]);
+      }
     } catch (err: any) {
-      console.error('Failed to load interaction users:', err);
-      // Fallback to empty array if endpoint fails
-      setSuggestedUsers([]);
+      if (__DEV__) console.log('Failed to load my stories:', err);
+      setMyStories([]);
     } finally {
       setLoadingUsers(false);
     }
@@ -195,16 +290,50 @@ export default function ProfileScreen() {
     }
   };
 
-  const checkFollowStatus = async (userId: string) => {
-    if (!user?.token || followingStatus[userId] !== undefined) return;
-    setCheckingFollowStatus(true);
+  const checkFollowStatus = async (targetUserId: string) => {
+    if (!user?.token || !targetUserId || targetUserId === user.id) return;
     try {
-      const response = await api.get<{ following: boolean }>(`/users/${userId}/following`, user.token);
-      setFollowingStatus(prev => ({ ...prev, [userId]: response.following }));
+      // Check if current user is following the target user
+      const response = await api.get<{ following: boolean }>(`/users/${targetUserId}/follow-status`, user.token);
+      setProfileFollowing(response.following);
     } catch (err: any) {
-      console.error('Failed to check follow status:', err);
+      if (__DEV__) console.log('Failed to check follow status:', err);
+    }
+  };
+
+  const handleFollowProfileUser = async () => {
+    if (!user?.token || !userId || userId === user.id) return;
+    // Make sure we're following the profile user (userId), not the current user
+    const targetUserId = userId; // This is the profile user's ID
+    setUpdatingFollow(true);
+    try {
+      // Current user (from token) follows/unfollows the target user (userId)
+      const response = await api.post<{ following: boolean }>(`/users/${targetUserId}/follow`, {}, user.token);
+      setProfileFollowing(response.following);
+      if (profileUser) {
+        setStats(prev => ({
+          ...prev,
+          followersCount: response.following ? prev.followersCount + 1 : prev.followersCount - 1,
+        }));
+      }
+    } catch (err: any) {
+      Alert.alert('Error', err.message || 'Failed to follow/unfollow user');
     } finally {
-      setCheckingFollowStatus(false);
+      setUpdatingFollow(false);
+    }
+  };
+
+  const handleMessageProfileUser = async () => {
+    if (!userId || !user?.token) return;
+    // Open direct chat with this user
+    if (profileUser) {
+      setSelectedUser({
+        _id: profileUser._id,
+        name: profileUser.name,
+        profilePhoto: profileUser.profilePhoto,
+      });
+      setShowChatModal(true);
+      await loadDirectMessages(profileUser._id);
     }
   };
 
@@ -227,8 +356,6 @@ export default function ProfileScreen() {
     try {
       const data = await api.get<Message[]>(`/messages/direct/${userId}`, user.token);
       setMessages(data);
-      // Refresh unread counts after loading messages (they will be marked as read)
-      await loadUnreadMessageCounts(suggestedUsers);
     } catch (err: any) {
       console.error('Failed to load messages:', err);
       // Start with empty messages if endpoint fails
@@ -268,10 +395,6 @@ export default function ProfileScreen() {
       );
       setMessages([...messages, newMessage]);
       setMessageText('');
-      // Refresh unread message counts after sending
-      if (suggestedUsers.length > 0) {
-        await loadUnreadMessageCounts(suggestedUsers);
-      }
     } catch (err: any) {
       Alert.alert('Error', err.message || 'Failed to send message');
     } finally {
@@ -569,12 +692,12 @@ export default function ProfileScreen() {
       <Header
         showSearch={false}
         showBack
-        showMenu={true}
-        rightAction={{
+        showMenu={!userId || userId === user?.id}
+        rightAction={(!userId || userId === user?.id) ? {
           onPress: handleCreatePost,
           icon: 'plus',
           circular: true,
-        }}
+        } : undefined}
         onMenuPress={() => {
           router.push('/settings');
         }}
@@ -582,80 +705,149 @@ export default function ProfileScreen() {
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         <View style={styles.profileSection}>
           <View style={styles.profilePictureContainer}>
-            {localProfilePhoto ? (
-              <Image source={{ uri: localProfilePhoto }} style={styles.profilePicture} />
+            {(profileUser?.profilePhoto || localProfilePhoto) ? (
+              <Image 
+                source={{ uri: profileUser?.profilePhoto || localProfilePhoto }} 
+                style={styles.profilePicture}
+              />
             ) : (
               <View style={styles.profilePicture}>
                 <View style={styles.avatarPlaceholder} />
               </View>
             )}
-            <Pressable
-              style={styles.cameraButton}
-              onPress={pickProfilePhoto}
-              disabled={uploadingPhoto}
-            >
-              {uploadingPhoto ? (
-                <ActivityIndicator size="small" color="#1A1A1A" />
-              ) : (
-                <IconSymbol name="camera.fill" size={16} color="#1A1A1A" />
-              )}
-            </Pressable>
+            {(!userId || userId === user?.id) && (
+              <Pressable
+                style={styles.cameraButton}
+                onPress={pickProfilePhoto}
+                disabled={uploadingPhoto}
+              >
+                {uploadingPhoto ? (
+                  <ActivityIndicator size="small" color="#1A1A1A" />
+                ) : (
+                  <IconSymbol name="camera.fill" size={16} color="#1A1A1A" />
+                )}
+              </Pressable>
+            )}
           </View>
 
           <View style={styles.profileInfo}>
-            <ThemedText style={styles.profileName}>{user.name}</ThemedText>
+            <ThemedText style={styles.profileName}>
+              {profileUser ? profileUser.name : user.name}
+            </ThemedText>
             <View style={styles.stats}>
               <View style={styles.statItem}>
                 <ThemedText style={styles.statNumber}>{formatCount(stats.postsCount)}</ThemedText>
                 <ThemedText style={styles.statLabel}>Posts</ThemedText>
               </View>
-              <View style={styles.statItem}>
+              <Pressable 
+                style={styles.statItem}
+                onPress={() => router.push({
+                  pathname: '/followers',
+                  params: { userId: userId || user?.id, initialTab: 'followers' },
+                })}
+              >
                 <ThemedText style={styles.statNumber}>{formatCount(stats.followersCount)}</ThemedText>
                 <ThemedText style={styles.statLabel}>Followers</ThemedText>
-              </View>
-              <View style={styles.statItem}>
+              </Pressable>
+              <Pressable 
+                style={styles.statItem}
+                onPress={() => router.push({
+                  pathname: '/followers',
+                  params: { userId: userId || user?.id, initialTab: 'following' },
+                })}
+              >
                 <ThemedText style={styles.statNumber}>{formatCount(stats.followingCount)}</ThemedText>
                 <ThemedText style={styles.statLabel}>Following</ThemedText>
-              </View>
+              </Pressable>
             </View>
-            <ThemedText style={styles.profileHandle}>@{user.email.split('@')[0]}</ThemedText>
+            <ThemedText style={styles.profileHandle}>
+              @{(profileUser ? profileUser.email : user.email).split('@')[0]}
+            </ThemedText>
             <ThemedText style={styles.profileBio}>
-              {user.bio || `Hello, I'm ${user.name}. Welcome to my profile!`}
+              {profileUser?.bio || user.bio || (profileUser ? `Hello, I'm ${profileUser.name}. Welcome to my profile!` : `Hello, I'm ${user.name}. Welcome to my profile!`)}
             </ThemedText>
           </View>
         </View>
-        {/* Interaction Flow Band - Users who messaged or liked stories */}
-        {suggestedUsers.length > 0 && (
+
+        {/* Follow/Message buttons for other user's profile */}
+        {userId && userId !== user?.id && (
+          <View style={styles.actionButtons}>
+            <Pressable
+              style={[styles.actionButton, profileFollowing && styles.followingButton]}
+              onPress={handleFollowProfileUser}
+              disabled={updatingFollow}
+            >
+              {updatingFollow ? (
+                <ActivityIndicator size="small" color={profileFollowing ? "#1A1A1A" : "#FFFFFF"} />
+              ) : (
+                <ThemedText style={[styles.actionButtonText, profileFollowing && styles.followingButtonText]}>
+                  {profileFollowing ? 'Following' : 'Follow'}
+                </ThemedText>
+              )}
+            </Pressable>
+            <Pressable
+              style={[styles.actionButton, styles.messageButton]}
+              onPress={handleMessageProfileUser}
+            >
+              <ThemedText style={styles.messageButtonText}>Message</ThemedText>
+            </Pressable>
+          </View>
+        )}
+
+        {/* My Stories Flow Band - Always shows current user's stories */}
+        {(!userId || userId === user?.id) && (
           <View style={styles.followFlowContainer}>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.followFlowScroll}>
-              {suggestedUsers.map((suggestedUser) => {
-                const unreadCount = unreadMessageCounts[suggestedUser._id] || 0;
+              {/* Create story button - Always visible */}
+              {user?.token && (
+                <Pressable
+                  onPress={() => setShowStoryCreation(true)}
+                  style={styles.followFlowItem}
+                >
+                  <View style={styles.followFlowAvatar}>
+                    <View style={[styles.followFlowAvatarPlaceholder, { borderWidth: 2, borderColor: brandYellow }]}>
+                      <IconSymbol name="plus" size={24} color={brandYellow} />
+                    </View>
+                  </View>
+                  <ThemedText style={styles.followFlowName} numberOfLines={1}>
+                    Your Story
+                  </ThemedText>
+                </Pressable>
+              )}
+              {/* Story indicators - Display like highlights */}
+              {myStories.map((storyItem, index) => {
+                // Get the first story's media for preview
+                const firstStory = storyItem.stories[0];
+                const previewImage = firstStory?.mediaUrl && firstStory.mediaType === 'image' 
+                  ? firstStory.mediaUrl 
+                  : storyItem.user.profilePhoto;
+                const storyLabel = firstStory?.caption || 'Story';
+
                 return (
                   <Pressable
-                    key={suggestedUser._id}
+                    key={`${storyItem.user._id}-${index}`}
+                    onPress={() => {
+                      setSelectedStoryUserIndex(index);
+                      setShowStoryViewer(true);
+                    }}
                     style={styles.followFlowItem}
-                    onPress={() => handleUserPress(suggestedUser)}
                   >
-                    <View style={styles.followFlowAvatar}>
-                      {suggestedUser.profilePhoto ? (
-                        <Image source={{ uri: suggestedUser.profilePhoto }} style={styles.followFlowAvatarImage} />
+                    <View style={styles.storyHighlightContainer}>
+                      {previewImage ? (
+                        <Image
+                          source={{ uri: previewImage }}
+                          style={styles.storyHighlightImage}
+                        />
                       ) : (
-                        <View style={styles.followFlowAvatarPlaceholder}>
-                          <ThemedText style={styles.followFlowAvatarText}>
-                            {suggestedUser.name.charAt(0).toUpperCase()}
-                          </ThemedText>
-                        </View>
-                      )}
-                      {unreadCount > 0 && (
-                        <View style={styles.unreadMessageBadge}>
-                          <ThemedText style={styles.unreadMessageBadgeText}>
-                            {unreadCount > 99 ? '99+' : unreadCount}
+                        <View style={[styles.storyHighlightImage, styles.storyHighlightPlaceholder]}>
+                          <ThemedText style={styles.storyHighlightText}>
+                            {storyItem.user.name.charAt(0).toUpperCase()}
                           </ThemedText>
                         </View>
                       )}
                     </View>
                     <ThemedText style={styles.followFlowName} numberOfLines={1}>
-                      {suggestedUser.name}
+                      {storyLabel.length > 12 ? `${storyLabel.substring(0, 12)}...` : storyLabel}
                     </ThemedText>
                   </Pressable>
                 );
@@ -924,7 +1116,7 @@ export default function ProfileScreen() {
               source={{ uri: selectedStream.playbackUrl }}
               style={styles.videoPlayer}
               useNativeControls
-              resizeMode="contain"
+              resizeMode={ResizeMode.CONTAIN}
               shouldPlay
             />
           ) : (
@@ -1236,6 +1428,24 @@ export default function ProfileScreen() {
           />
         </KeyboardAvoidingView>
       </Modal>
+
+      {/* Story Viewer */}
+      <StoryViewer
+        visible={showStoryViewer}
+        feed={myStories}
+        initialUserIndex={selectedStoryUserIndex}
+        onClose={() => setShowStoryViewer(false)}
+      />
+
+      {/* Story Creation Modal */}
+      <StoryCreationModal
+        visible={showStoryCreation}
+        onClose={() => setShowStoryCreation(false)}
+        onStoryCreated={() => {
+          setShowStoryCreation(false);
+          loadMyStories();
+        }}
+      />
     </ThemedView>
   );
 }
@@ -1335,7 +1545,7 @@ const styles = StyleSheet.create({
   followFlowAvatar: {
     width: 60,
     height: 60,
-    borderRadius: 30,
+    borderRadius: 50,
     overflow: 'visible',
     marginBottom: 6,
     borderWidth: 2,
@@ -1350,6 +1560,7 @@ const styles = StyleSheet.create({
   followFlowAvatarPlaceholder: {
     width: '100%',
     height: '100%',
+    borderRadius: 50,
     backgroundColor: '#E0E0E0',
     alignItems: 'center',
     justifyContent: 'center',
@@ -1364,12 +1575,71 @@ const styles = StyleSheet.create({
     color: '#1A1A1A',
     textAlign: 'center',
     maxWidth: 70,
+    marginTop: 4,
+  },
+  storyHighlightContainer: {
+    width: 70,
+    height: 70,
+    borderRadius: 35,
+    borderWidth: 2,
+    borderColor: '#E0E0E0',
+    overflow: 'hidden',
+    backgroundColor: '#F5F5F5',
+    marginBottom: 4,
+  },
+  storyHighlightImage: {
+    width: '100%',
+    height: '100%',
+  },
+  storyHighlightPlaceholder: {
+    backgroundColor: '#E0E0E0',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  storyHighlightText: {
+    fontSize: 24,
+    fontWeight: '600',
+    color: '#666',
+  },
+  actionButtons: {
+    flexDirection: 'row',
+    gap: 12,
+    paddingHorizontal: 16,
+    marginBottom: 16,
+  },
+  actionButton: {
+    flex: 1,
+    backgroundColor: brandYellow,
+    paddingVertical: 10,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  followingButton: {
+    backgroundColor: '#F5F5F5',
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+  },
+  actionButtonText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  followingButtonText: {
+    color: '#1A1A1A',
+  },
+  messageButton: {
+    backgroundColor: brandYellow,
+  },
+  messageButtonText: {
+    color: '#1A1A1A',
+    fontSize: 14,
+    fontWeight: '600',
   },
   unreadMessageBadge: {
     position: 'absolute',
     top: -4,
     right: -4,
-    backgroundColor: '#EF4444',
+    backgroundColor: brandYellowDark,
     borderRadius: 10,
     minWidth: 20,
     height: 20,

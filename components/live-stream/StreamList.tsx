@@ -5,7 +5,7 @@ import { ThemedView } from '../themed-view';
 import { MaterialIcons } from '@expo/vector-icons';
 import { api } from '@/lib/api';
 import { Stream } from '@/types';
-import { brandYellow } from '@/constants/theme';
+import { brandYellow, brandYellowDark } from '@/constants/theme';
 import { useAuth } from '@/hooks/use-auth';
 
 interface StreamListProps {
@@ -230,7 +230,7 @@ const styles = StyleSheet.create({
     left: 8,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#EF4444',
+    backgroundColor: brandYellowDark,
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 12,
@@ -285,7 +285,7 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   saveButtonTextSaved: {
-    color: '#EF4444',
+    color: brandYellowDark,
     fontWeight: '700',
   },
   saveButtonTextDisabled: {

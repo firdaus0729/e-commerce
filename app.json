@@ -4,7 +4,7 @@
     "slug": "tiktokshop",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.jpg",
+    "icon": "./assets/images/splash-icon.png",
     "scheme": "myfirstapp",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
@@ -52,7 +52,7 @@
     },
     "extra": {
       "router": {},
-      "apiUrl": "http://192.168.145.108:4000",
+      "apiUrl": "https://e-commerce-social-app.onrender.com",
       "eas": {
         "projectId": "9a73dbe4-7494-4a81-a025-78376f8c443a"
       }
